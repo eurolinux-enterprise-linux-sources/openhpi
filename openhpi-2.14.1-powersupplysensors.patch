@@ -1,0 +1,615 @@
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap_annunciator.h.powersupplysensors openhpi-2.14.1/plugins/oa_soap/oa_soap_annunciator.h
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap_annunciator.h.powersupplysensors	2009-11-23 21:16:52.000000000 +0100
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap_annunciator.h	2012-12-17 12:40:06.387455965 +0100
+@@ -31,8 +31,8 @@
+  * Author(s)
+  *      Raghavendra M.S. <raghavendra.ms@hp.com>
+  */
+-#ifndef _OA_SOAP_ANNUCIATOR_H
+-#define _OA_SOAP_ANNUCIATOR_H
++#ifndef _OA_SOAP_ANNUNCIATOR_H
++#define _OA_SOAP_ANNUNCIATOR_H
+ 
+ /* Include files */
+ #include <SaHpi.h>
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap_calls.c.powersupplysensors openhpi-2.14.1/plugins/oa_soap/oa_soap_calls.c
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap_calls.c.powersupplysensors	2009-11-23 21:16:51.000000000 +0100
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap_calls.c	2012-12-17 12:40:06.388455965 +0100
+@@ -41,6 +41,7 @@
+ #include <oh_error.h>
+ #define OA_SOAP_CALLS_FILE              /* Defines ENUM strings in this file */
+ #include "oa_soap_calls.h"
++#include "oa_soap_discover.h"
+ 
+ 
+ /* Macros used in this file, to simplify common code */
+@@ -419,12 +420,33 @@ static void     parse_interconnectTrayIn
+ static void     parse_powerSupplyInfo(xmlNode *node,
+                                       struct powerSupplyInfo *response)
+ {
++	char *temp_val=NULL;
++	int len=0;
+         response->bayNumber = atoi(soap_tree_value(node, "bayNumber"));
+         response->presence =
+                 soap_enum(presence_S, soap_tree_value(node, "presence"));
+-        response->modelNumber = soap_tree_value(node, "modelNumber");
+-        response->sparePartNumber = soap_tree_value(node, "sparePartNumber");
+-        response->serialNumber = soap_tree_value(node, "serialNumber");
++
++	temp_val=soap_tree_value(node, "modelNumber");
++	if ( temp_val != NULL && (len = strlen(temp_val) < MAX_MODEL_NUM_LENGTH)) { 
++		strcpy(response->modelNumber, temp_val);
++	}
++	else
++		dbg("Internal Error: Power Supply modelNumber does not exist or too long");
++
++	temp_val=soap_tree_value(node, "sparePartNumber");
++	if ( temp_val != NULL && (len = strlen(temp_val) < MAX_PART_NUM_LENGTH)) {
++		strcpy(response->sparePartNumber, temp_val);
++	}
++	else
++		dbg("Internal Error: Power Supply sparePartNumber does not exist or too long");
++
++	temp_val=soap_tree_value(node, "serialNumber");
++	if ( temp_val != NULL && (len = strlen(temp_val) < MAX_SERIAL_NUM_LENGTH)) {
++		strcpy(response->serialNumber, temp_val);
++	}
++	else
++		dbg("Internal Error: Power Supply serialNumber does not exist or too long");
++
+         response->capacity = atoi(soap_tree_value(node, "capacity"));
+         response->actualOutput = atoi(soap_tree_value(node, "actualOutput"));
+         response->extraData = soap_walk_tree(node, "extraData");
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap_calls.h.powersupplysensors openhpi-2.14.1/plugins/oa_soap/oa_soap_calls.h
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap_calls.h.powersupplysensors	2009-11-23 21:16:51.000000000 +0100
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap_calls.h	2012-12-17 12:40:06.389455970 +0100
+@@ -35,13 +35,18 @@
+  *     Anand S <S.Anand@hp.com>
+  */
+ 
+-#ifndef _INC_OA_SOAP_CALLS_H_
+-#define _INC_OA_SOAP_CALLS_H_
++#ifndef _OA_SOAP_CALLS_H_
++#define _OA_SOAP_CALLS_H_
+ 
+ 
+ /* Include files */
+ #include "oa_soap_callsupport.h"
+ 
++/* Maximum length of the serial number, model number and part number */
++#define MAX_SERIAL_NUM_LENGTH 32
++#define MAX_PART_NUM_LENGTH 32
++#define MAX_MODEL_NUM_LENGTH 32
++
+ 
+ /* Data types used to help us be more consistent with the WSDL description */
+ typedef unsigned char byte;
+@@ -1244,9 +1249,9 @@ struct powerSupplyInfo
+ {
+         byte bayNumber;
+         enum presence presence;
+-        char *modelNumber;
+-        char *sparePartNumber;
+-        char *serialNumber;
++        char modelNumber[MAX_MODEL_NUM_LENGTH];
++        char sparePartNumber[MAX_PART_NUM_LENGTH];
++        char serialNumber[MAX_SERIAL_NUM_LENGTH];
+         int capacity;
+         int actualOutput;
+         xmlNode *extraData;             /* Items are struct extraDataInfo */
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap_callsupport.h.powersupplysensors openhpi-2.14.1/plugins/oa_soap/oa_soap_callsupport.h
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap_callsupport.h.powersupplysensors	2009-11-23 21:16:51.000000000 +0100
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap_callsupport.h	2012-12-17 12:40:06.389455970 +0100
+@@ -37,8 +37,8 @@
+  */
+ 
+ 
+-#ifndef _INC_OA_SOAP_CALLSUPPORT_H_
+-#define _INC_OA_SOAP_CALLSUPPORT_H_
++#ifndef _OA_SOAP_CALLSUPPORT_H_
++#define _OA_SOAP_CALLSUPPORT_H_
+ 
+ 
+ /* Include files */
+@@ -252,4 +252,4 @@ int             soap_inv_enum(char *resu
+         "<SOAP-ENV:Body>\n"
+ 
+ 
+-#endif  /* _INC_OASOAP_CALLSUPPORT_H_ */
++#endif  /* _OA_SOAP_CALLSUPPORT_H_ */
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap.c.powersupplysensors openhpi-2.14.1/plugins/oa_soap/oa_soap.c
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap.c.powersupplysensors	2009-11-23 21:16:51.000000000 +0100
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap.c	2012-12-17 12:40:06.387455965 +0100
+@@ -57,6 +57,7 @@
+  *                                        from OA
+  **/
+ 
++#include "oa_soap_discover.h"
+ #include "oa_soap.h"
+ #include "oa_soap_utils.h"
+ 
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap_discover.c.powersupplysensors openhpi-2.14.1/plugins/oa_soap/oa_soap_discover.c
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap_discover.c.powersupplysensors	2009-11-23 21:16:51.000000000 +0100
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap_discover.c	2012-12-17 12:40:06.391455981 +0100
+@@ -2708,7 +2708,7 @@ SaErrorT build_power_supply_rdr(struct o
+ 	SaHpiInt32T sensor_status;
+ 	enum diagnosticStatus diag_ex_status[OA_SOAP_MAX_DIAG_EX];
+ 
+-        if (oh_handler == NULL || con == NULL || response == NULL) {
++        if (oh_handler == NULL || con == NULL ) {
+                 err("Invalid parameters");
+                 return SA_ERR_HPI_INVALID_PARAMS;
+         }
+@@ -2797,6 +2797,7 @@ SaErrorT build_power_supply_rdr(struct o
+  *      SA_OK                     - on success.
+  *      SA_ERR_HPI_INVALID_PARAMS - on wrong parameters
+  *      SA_ERR_HPI_INTERNAL_ERROR - on failure.
++ *      SA_ERR_HPI_OUT_OF_MEMORY  - on out of memory.
+  **/
+ SaErrorT discover_power_supply(struct oh_handler_state *oh_handler)
+ {
+@@ -2804,7 +2805,7 @@ SaErrorT discover_power_supply(struct oh
+         struct oa_soap_handler *oa_handler = NULL;
+         SaHpiInt32T i;
+         struct getPowerSupplyInfo request;
+-        struct powerSupplyInfo response;
++        struct powerSupplyInfo *response = NULL;
+         char power_supply[] = POWER_SUPPLY_NAME;
+         SaHpiResourceIdT resource_id;
+ 
+@@ -2815,17 +2816,29 @@ SaErrorT discover_power_supply(struct oh
+ 
+         oa_handler = (struct oa_soap_handler *) oh_handler->data;
+ 
++        response = (struct powerSupplyInfo *)g_malloc0(sizeof(struct 
++                      powerSupplyInfo));
++        if( response == NULL){
++                return SA_ERR_HPI_OUT_OF_MEMORY;
++        }
+         for (i = 1; i <= oa_handler->oa_soap_resources.ps_unit.max_bays; i++) {
++                response->presence = PRESENCE_NO_OP;
++                response->modelNumber[0] = '\0';
++                response->sparePartNumber[0] = '\0';
++                response->serialNumber[0] = '\0';
++
+                 request.bayNumber = i;
+                 rv = soap_getPowerSupplyInfo(oa_handler->active_con,
+-                                             &request, &response);
++                                             &request, response);
+                 if (rv != SOAP_OK) {
+                         err("Get power supply info failed");
++                        g_free(response);
++                        response = NULL;
+                         return SA_ERR_HPI_INTERNAL_ERROR;
+                 }
+ 
+                 /* If resource not present, continue checking for next bay */
+-                if (response.presence != PRESENT)
++                if (response->presence != PRESENT)
+                         continue;
+ 
+                 /* If the power supply unit does not have the power cord
+@@ -2834,7 +2847,7 @@ SaErrorT discover_power_supply(struct oh
+                  * response structure is NULL. Consider the faulty power supply
+                  *  unit as ABSENT
+                  */
+-                if (response.serialNumber == NULL)
++                if (response->serialNumber[0] == '\0')
+                         continue;
+ 
+                 /* Build the rpt entry for power supply unit */
+@@ -2842,6 +2855,8 @@ SaErrorT discover_power_supply(struct oh
+                                             i, &resource_id);
+                 if (rv != SA_OK) {
+                         err("build power supply unit rpt failed");
++                        g_free(response);
++                        response = NULL;
+                         return rv;
+                 }
+ 
+@@ -2850,21 +2865,25 @@ SaErrorT discover_power_supply(struct oh
+                  */
+                 oa_soap_update_resource_status(
+                       &oa_handler->oa_soap_resources.ps_unit, i,
+-                      response.serialNumber, resource_id, RES_PRESENT);
++                      response->serialNumber, resource_id, RES_PRESENT);
+ 
+                 /* Build the rdr entry for power supply */
+                 rv = build_power_supply_rdr(oh_handler, oa_handler->active_con,
+-                                            &response, resource_id);
++                                            response, resource_id);
+                 if (rv != SA_OK) {
+                         err("build power supply unit RDR failed");
+                         /* Reset resource_status structure to default values */
+                         oa_soap_update_resource_status(
+                               &oa_handler->oa_soap_resources.ps_unit, i,
+                               "", SAHPI_UNSPECIFIED_RESOURCE_ID, RES_ABSENT);
++                        g_free(response);
++                        response = NULL;
+                         return rv;
+                 }
+ 
+         }
++        g_free(response);
++        response = NULL;
+         return SA_OK;
+ }
+ 
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap_discover.h.powersupplysensors openhpi-2.14.1/plugins/oa_soap/oa_soap_discover.h
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap_discover.h.powersupplysensors	2009-11-23 21:16:51.000000000 +0100
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap_discover.h	2012-12-17 12:40:06.391455981 +0100
+@@ -50,8 +50,6 @@
+ #define POWER_SUBSYSTEM_NAME "Power Subsystem"
+ #define OA_NAME "Onboard Administrator"
+ #define MAX_NAME_LEN 64
+-/* Maximum length of the serial number */
+-#define MAX_SERIAL_NUM_LENGTH 32
+ 
+ #define CISCO "CISCO"                   /* Identifies the Cisco interconnects */
+ 
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap_inventory.c.powersupplysensors openhpi-2.14.1/plugins/oa_soap/oa_soap_inventory.c
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap_inventory.c.powersupplysensors	2009-11-23 21:16:51.000000000 +0100
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap_inventory.c	2012-12-17 12:40:06.393455985 +0100
+@@ -2356,7 +2356,7 @@ SaErrorT build_power_inv_rdr(struct oh_h
+         SaHpiResourceIdT resource_id;
+         SaHpiRptEntryT *rpt = NULL;
+ 
+-        if (oh_handler == NULL || response == NULL || rdr == NULL ||
++        if (oh_handler == NULL || rdr == NULL ||
+             inventory == NULL) {
+                 err("Invalid parameter.");
+                 return SA_ERR_HPI_INVALID_PARAMS;
+@@ -2681,7 +2681,8 @@ SaErrorT add_board_area(struct oa_soap_a
+         /* If both part number and serial number information is NULL
+          * then board area is not created
+          */
+-        if (part_number == NULL && serial_number == NULL) {
++        if ((part_number == NULL && serial_number == NULL) &&
++            (part_number[0] == '\0' && serial_number[0] == '\0')) {
+                 err("Board Area:Required information not available");
+                 err("Board area not created");
+                 *success_flag = SAHPI_FALSE;
+@@ -2701,7 +2702,7 @@ SaErrorT add_board_area(struct oa_soap_a
+ 
+         /* Add the fields to the newly created product area */
+         field = local_area->field_list;
+-        if (part_number != NULL) {
++        if (part_number != NULL && part_number[0] != '\0') {
+ 
+                 memset(&hpi_field, 0, sizeof(SaHpiIdrFieldT));
+                 hpi_field.AreaId = local_area->idr_area_head.AreaId;
+@@ -2720,7 +2721,7 @@ SaErrorT add_board_area(struct oa_soap_a
+                 }
+                 local_area->idr_area_head.NumFields++;
+         }
+-        if (serial_number != NULL) {
++        if (serial_number != NULL && serial_number[0] != '\0') {
+                 memset(&hpi_field, 0, sizeof(SaHpiIdrFieldT));
+                 hpi_field.AreaId = local_area->idr_area_head.AreaId;
+                 hpi_field.Type = SAHPI_IDR_FIELDTYPE_SERIAL_NUMBER;
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap_ps_event.c.powersupplysensors openhpi-2.14.1/plugins/oa_soap/oa_soap_ps_event.c
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap_ps_event.c.powersupplysensors	2009-11-23 21:16:52.000000000 +0100
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap_ps_event.c	2012-12-17 12:40:06.393455985 +0100
+@@ -62,13 +62,14 @@
+  *      SA_OK                     - success.
+  *      SA_ERR_HPI_INVALID_PARAMS - on wrong parameters.
+  *      SA_ERR_HPI_INTERNAL_ERROR - on failure
++ *      SA_ERR_HPI_OUT_OF_MEMORY  - on out of memory.
+  **/
+ SaErrorT process_ps_insertion_event(struct oh_handler_state *oh_handler,
+                                     SOAP_CON *con,
+                                     struct eventInfo *oa_event)
+ {
+         struct getPowerSupplyInfo info;
+-        struct powerSupplyInfo response;
++        struct powerSupplyInfo *response = NULL;
+         SaErrorT rv = SA_OK;
+ 
+         if (oh_handler == NULL || con == NULL || oa_event == NULL) {
+@@ -77,9 +78,20 @@ SaErrorT process_ps_insertion_event(stru
+         }
+ 
+         info.bayNumber = oa_event->eventData.powerSupplyStatus.bayNumber;
+-        rv = soap_getPowerSupplyInfo(con, &info, &response);
++        response = (struct powerSupplyInfo *)g_malloc0(sizeof(struct powerSupplyInfo));
++        if( response == NULL){
++                return SA_ERR_HPI_OUT_OF_MEMORY;
++        }
++        response->presence = PRESENCE_NO_OP;
++        response->modelNumber[0] = '\0';
++        response->sparePartNumber[0] = '\0';
++        response->serialNumber[0] = '\0';
++
++        rv = soap_getPowerSupplyInfo(con, &info, response);
+         if (rv != SOAP_OK) {
+                 err("Get power supply info failed");
++                g_free(response);
++                response = NULL;
+                 return SA_ERR_HPI_INTERNAL_ERROR;
+         }
+ 
+@@ -88,16 +100,23 @@ SaErrorT process_ps_insertion_event(stru
+          * all the information in the response structure is NULL. Consider the
+          * faulty power supply unit as ABSENT
+          */
+-        if (response.serialNumber == NULL) {
++        if (response->serialNumber[0] == '\0') {
+                 err("Inserted power supply unit may be faulty");
++                g_free(response);
++                response = NULL;
+                 return SA_ERR_HPI_INTERNAL_ERROR;
+         }
+ 
+-        rv = add_ps_unit(oh_handler, con, &response);
++        rv = add_ps_unit(oh_handler, con, response);
+         if (rv != SA_OK) {
+                 err("Add power supply unit failed");
++                g_free(response);
++                response = NULL;
++                return rv;
+         }
+ 
++        g_free(response);
++        response = NULL;
+         return SA_OK;
+ }
+ 
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap_ps_event.h.powersupplysensors openhpi-2.14.1/plugins/oa_soap/oa_soap_ps_event.h
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap_ps_event.h.powersupplysensors	2009-11-23 21:16:52.000000000 +0100
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap_ps_event.h	2012-12-17 12:40:06.393455985 +0100
+@@ -32,8 +32,8 @@
+  *      Raghavendra P.G. <raghavendra.pg@hp.com>
+  */
+ 
+-#ifndef _OA_SOAP_POWER_SUPPLY_EVENT_H
+-#define _OA_SOAP_POWER_SUPPLY_EVENT_H
++#ifndef _OA_SOAP_PS_EVENT_H
++#define _OA_SOAP_PS_EVENT_H
+ 
+ /* Include files */
+ #include "oa_soap_re_discover.h"
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap_re_discover.c.powersupplysensors openhpi-2.14.1/plugins/oa_soap/oa_soap_re_discover.c
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap_re_discover.c.powersupplysensors	2009-11-23 21:16:51.000000000 +0100
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap_re_discover.c	2012-12-17 12:40:06.395455988 +0100
+@@ -2034,6 +2034,7 @@ SaErrorT add_fan(struct oh_handler_state
+  *      SA_OK                     - on success.
+  *      SA_ERR_HPI_INVALID_PARAMS - on wrong parameters
+  *      SA_ERR_HPI_INTERNAL_ERROR - on failure.
++ *      SA_ERR_HPI_OUT_OF_MEMORY  - on out of memory
+  **/
+ SaErrorT re_discover_ps_unit(struct oh_handler_state *oh_handler,
+                              SOAP_CON *con)
+@@ -2041,7 +2042,7 @@ SaErrorT re_discover_ps_unit(struct oh_h
+         SaErrorT rv = SA_OK;
+         struct oa_soap_handler *oa_handler;
+         struct getPowerSupplyInfo request;
+-        struct powerSupplyInfo response;
++        struct powerSupplyInfo *response = NULL;
+         SaHpiInt32T i;
+         enum resource_presence_status state = RES_ABSENT;
+         SaHpiBoolT replace_resource = SAHPI_FALSE;
+@@ -2053,11 +2054,23 @@ SaErrorT re_discover_ps_unit(struct oh_h
+ 
+         oa_handler = (struct oa_soap_handler *) oh_handler->data;
+ 
++        response = (struct powerSupplyInfo *)g_malloc0(sizeof(struct
++                   powerSupplyInfo));
++        if ( response == NULL )
++                return SA_ERR_HPI_OUT_OF_MEMORY;
++
+         for (i = 1; i <= oa_handler->oa_soap_resources.ps_unit.max_bays; i++) {
+                 request.bayNumber = i;
+-                rv = soap_getPowerSupplyInfo(con, &request, &response);
++                response->presence = PRESENCE_NO_OP;
++                response->modelNumber[0] = '\0';
++                response->sparePartNumber[0] = '\0';
++                response->serialNumber[0] = '\0';
++
++                rv = soap_getPowerSupplyInfo(con, &request, response);
+                 if (rv != SOAP_OK) {
+                         err("Get power supply info failed");
++                        g_free(response);
++                        response = NULL;
+                         return SA_ERR_HPI_INTERNAL_ERROR;
+                 }
+ 
+@@ -2067,8 +2080,8 @@ SaErrorT re_discover_ps_unit(struct oh_h
+                  * response structure is NULL. Consider the faulty power supply
+                  * unit as ABSENT
+                  */
+-                if (response.presence != PRESENT ||
+-                    response.serialNumber == NULL) {
++                if (response->presence != PRESENT ||
++                    (response->serialNumber == NULL || response->serialNumber[0] == '\0')) {
+                         /* The power supply unit is absent.  Is the power
+                          * supply unit absent in the presence matrix?
+                          */
+@@ -2091,7 +2104,7 @@ SaErrorT re_discover_ps_unit(struct oh_h
+                                  */
+                                 if (strcmp(oa_handler->oa_soap_resources.
+                                            ps_unit.serial_number[i - 1],
+-                                           response.serialNumber) != 0) {
++                                           response->serialNumber) != 0) {
+                                         replace_resource = SAHPI_TRUE;
+                                  } else {
+ 					/* Check the power supply sensors
+@@ -2102,6 +2115,8 @@ SaErrorT re_discover_ps_unit(struct oh_h
+ 					if (rv != SA_OK) {
+ 						err("Re-discover power supply "
+ 						    "sensors failed");
++                                                g_free(response);
++                                                response = NULL;
+ 						return rv;
+ 					}
+                                         continue;
+@@ -2119,6 +2134,8 @@ SaErrorT re_discover_ps_unit(struct oh_h
+                         rv = remove_ps_unit(oh_handler, i);
+                         if (rv != SA_OK) {
+                                 err("Power Supply Unit %d removal failed", i);
++                                g_free(response);
++                                response = NULL;
+                                 return rv;
+                         } else
+                                 err("Power Supply Unit %d removed", i);
+@@ -2130,9 +2147,11 @@ SaErrorT re_discover_ps_unit(struct oh_h
+                          * added.  Add the power supply unit resource from
+                          * RPTable.
+                          */
+-                        rv = add_ps_unit(oh_handler, con, &response);
++                        rv = add_ps_unit(oh_handler, con, response);
+                         if (rv != SA_OK) {
+                                 err("Power Supply Unit %d add failed", i);
++                                g_free(response);
++                                response = NULL;
+                                 return rv;
+                         } else
+                                 err("Power Supply Unit %d added", i);
+@@ -2140,6 +2159,8 @@ SaErrorT re_discover_ps_unit(struct oh_h
+                         replace_resource = SAHPI_FALSE;
+                 }
+         } /* End of for loop */
++        
++        g_free(response);
+         return SA_OK;
+ }
+ 
+@@ -2242,7 +2263,7 @@ SaErrorT add_ps_unit(struct oh_handler_s
+         struct oh_event event;
+         SaHpiResourceIdT resource_id;
+         struct getPowerSupplyInfo request;
+-        struct powerSupplyInfo response;
++        struct powerSupplyInfo *response = NULL;
+ 	GSList *asserted_sensors = NULL;
+ 	SaHpiRptEntryT *rpt;
+ 
+@@ -2254,11 +2275,24 @@ SaErrorT add_ps_unit(struct oh_handler_s
+         oa_handler = (struct oa_soap_handler *) oh_handler->data;
+         update_hotswap_event(oh_handler, &event);
+ 
++
+         /* Get power supply info to obtain the serial number */
+         request.bayNumber = info->bayNumber;
+-        rv = soap_getPowerSupplyInfo(con, &request, &response);
++        response = (struct powerSupplyInfo *)g_malloc0(sizeof(struct
++                   powerSupplyInfo));
++        if ( response == NULL )
++                return SA_ERR_HPI_OUT_OF_MEMORY;
++
++        response->presence = PRESENCE_NO_OP;
++        response->modelNumber[0] = '\0';
++        response->sparePartNumber[0] = '\0';
++        response->serialNumber[0] = '\0';
++
++        rv = soap_getPowerSupplyInfo(con, &request, response);
+         if (rv != SOAP_OK) {
+                 err("Get power supply info failed");
++                g_free(response);
++                response = NULL;
+                 return SA_ERR_HPI_INTERNAL_ERROR;
+         }
+ 
+@@ -2267,6 +2301,8 @@ SaErrorT add_ps_unit(struct oh_handler_s
+                                     info->bayNumber, &resource_id);
+         if (rv != SA_OK) {
+                 err("build power supply rpt failed");
++                g_free(response);
++                response = NULL;
+                 return rv;
+         }
+ 
+@@ -2275,7 +2311,7 @@ SaErrorT add_ps_unit(struct oh_handler_s
+          */
+         oa_soap_update_resource_status(
+                       &oa_handler->oa_soap_resources.ps_unit, info->bayNumber,
+-                      response.serialNumber, resource_id, RES_PRESENT);
++                      response->serialNumber, resource_id, RES_PRESENT);
+ 
+         /* Build the RDRs */
+         rv = build_power_supply_rdr(oh_handler, con, info, resource_id);
+@@ -2293,6 +2329,9 @@ SaErrorT add_ps_unit(struct oh_handler_s
+                               &oa_handler->oa_soap_resources.ps_unit,
+                               info->bayNumber,
+                               "", SAHPI_UNSPECIFIED_RESOURCE_ID, RES_ABSENT);
++
++                g_free(response);
++                response = NULL;
+                 return SA_ERR_HPI_INTERNAL_ERROR;
+         }
+ 
+@@ -2300,6 +2339,8 @@ SaErrorT add_ps_unit(struct oh_handler_s
+ 				    &asserted_sensors);
+         if (rv != SA_OK) {
+                 err("Populating event struct failed");
++                g_free(response);
++                response = NULL;
+                 return rv;
+         }
+ 
+@@ -2320,6 +2361,8 @@ SaErrorT add_ps_unit(struct oh_handler_s
+ 		oa_soap_assert_sen_evt(oh_handler, rpt, asserted_sensors);
+ 	}
+ 
++        g_free(response);
++        response = NULL;
+         return SA_OK;
+ }
+ 
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap_sensor.c.powersupplysensors openhpi-2.14.1/plugins/oa_soap/oa_soap_sensor.c
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap_sensor.c.powersupplysensors	2009-11-23 21:16:51.000000000 +0100
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap_sensor.c	2012-12-17 12:40:06.396455991 +0100
+@@ -1024,7 +1024,7 @@ SaErrorT update_sensor_rdr(struct oh_han
+         struct getFanInfo fan_request;
+         struct fanInfo fan_response;
+         struct getPowerSupplyInfo power_supply_request;
+-        struct powerSupplyInfo power_supply_response;
++        struct powerSupplyInfo *power_supply_response = NULL;
+         struct powerSubsystemInfo ps_response;
+         SaHpiInt32T location = -1;
+ 
+@@ -1211,17 +1211,29 @@ SaErrorT update_sensor_rdr(struct oh_han
+                         /* Fetching current actual power output info of
+                          * power supply in the specified bay number
+                          */
++                        power_supply_response = (struct powerSupplyInfo *)g_malloc0
++                              (sizeof(struct powerSupplyInfo));
++                        if ( power_supply_response == NULL )
++                                return SA_ERR_HPI_OUT_OF_MEMORY;
++                        power_supply_response->presence = PRESENCE_NO_OP;
++                        power_supply_response->modelNumber[0] = '\0';
++                        power_supply_response->sparePartNumber[0] = '\0';
++                        power_supply_response->serialNumber[0] = '\0';
++
+                         rv = soap_getPowerSupplyInfo(oa_handler->active_con,
+                                                      &power_supply_request,
+-                                                     &power_supply_response);
+-                        if (rv != SOAP_OK) {
++                                                     power_supply_response);
++                        if (rv != SOAP_OK) { 
++                                g_free(power_supply_response);
+                                 return SA_ERR_HPI_INTERNAL_ERROR;
+                         }
+                         sensor_data->data.IsSupported = SAHPI_TRUE;
+                         sensor_data->data.Type =
+                                 SAHPI_SENSOR_READING_TYPE_FLOAT64;
+                         sensor_data->data.Value.SensorFloat64 =
+-                                power_supply_response.actualOutput;
++                                power_supply_response->actualOutput;
++                        g_free(power_supply_response);
++                        power_supply_response = NULL;
+                         break;
+                 default:
+                         err("Wrong resource type");
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap_utils.c.powersupplysensors openhpi-2.14.1/plugins/oa_soap/oa_soap_utils.c
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap_utils.c.powersupplysensors	2009-11-23 21:16:51.000000000 +0100
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap_utils.c	2012-12-17 12:40:06.396455991 +0100
+@@ -1468,9 +1468,8 @@ void oa_soap_update_resource_status(reso
+                     index);
+                 return;
+         }
+-        if (serial_number != NULL) {
++        if ((serial_number != NULL) && (serial_number[0] != '\0')) {
+                 size_t len;
+-
+                 len = strlen(serial_number);
+                 strncpy(res_status->serial_number[index-1], serial_number, len);
+                 res_status->serial_number[index-1][len] = '\0';

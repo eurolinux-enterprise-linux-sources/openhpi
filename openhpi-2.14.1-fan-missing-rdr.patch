@@ -1,0 +1,28 @@
+commit 1f415bd5a8f07eac28bd0f7a39a95e19920608db
+Author: dr_mohan <dr_mohan@a44bbd40-eb13-0410-a9b2-f80f2f72fa26>
+Date:   Tue Jan 18 21:52:50 2011 +0000
+
+    Fix for bugzilla 3152855, Sensor RDRs missing for the fan resource
+    
+    git-svn-id: https://openhpi.svn.sourceforge.net/svnroot/openhpi/openhpi/trunk@7251 a44bbd40-eb13-0410-a9b2-f80f2f72fa26
+
+diff --git a/plugins/oa_soap/oa_soap_discover.c b/plugins/oa_soap/oa_soap_discover.c
+index ed55628..6d71170 100644
+--- a/plugins/oa_soap/oa_soap_discover.c
++++ b/plugins/oa_soap/oa_soap_discover.c
+@@ -3569,7 +3569,14 @@ SaErrorT oa_soap_build_fan_rdr(struct oh_handler_state *oh_handler,
+ 	/* Build device missing sensor rdr */
+ 	OA_SOAP_BUILD_ENABLE_SENSOR_RDR(OA_SOAP_SEN_DEV_MISS,
+ 					diag_ex_status[DIAG_EX_DEV_MISS])
+-
++      
++        /* Build Device not supported sensor rdr */
++	 OA_SOAP_BUILD_ENABLE_SENSOR_RDR(OA_SOAP_SEN_DEV_NOT_SUPPORT,
++  	                                diag_ex_status[DIAG_EX_DEV_NOT_SUPPORT])
++
++        /* Build Device mix match sensor rdr */
++        OA_SOAP_BUILD_ENABLE_SENSOR_RDR(OA_SOAP_SEN_DEV_MIX_MATCH,
++                                        diag_ex_status[DIAG_EX_DEV_MIX_MATCH])
+         return SA_OK;
+ }
+ 

@@ -1,0 +1,25 @@
+diff -up openhpi-2.14.1/plugins/oa_soap/oa_soap_utils.c.oa-reconnect-fix openhpi-2.14.1/plugins/oa_soap/oa_soap_utils.c
+--- openhpi-2.14.1/plugins/oa_soap/oa_soap_utils.c.oa-reconnect-fix	2013-04-03 22:04:57.559644582 +0200
++++ openhpi-2.14.1/plugins/oa_soap/oa_soap_utils.c	2013-04-03 22:55:53.148644716 +0200
+@@ -803,7 +803,7 @@ SaErrorT check_oa_user_permissions(struc
+ 
+ SaErrorT check_discovery_failure(struct oh_handler_state *oh_handler)
+ {
+-        SaErrorT oa1_rv, oa2_rv;
++        SaErrorT oa1_rv, oa2_rv, rv;
+         struct oa_soap_handler *oa_handler = NULL;
+ 
+         if (oh_handler == NULL) {
+@@ -817,6 +817,12 @@ SaErrorT check_discovery_failure(struct 
+         oa2_rv = SA_ERR_HPI_INTERNAL_ERROR;
+ 
+         /* If the hpi_con is NULL, then OA is not reachable */
++        rv = get_oa_soap_info(oh_handler);
++       	if (rv != SA_OK) {
++                oa_handler->status = PLUGIN_NOT_INITIALIZED;
++                err("Get OA SOAP info failed");
++                return rv;
++        }
+         if (oa_handler->oa_1->hpi_con != NULL) {
+                 /* Get the status of the OA in slot 1 */
+                 oa1_rv = check_oa_status(oa_handler, oa_handler->oa_1,
