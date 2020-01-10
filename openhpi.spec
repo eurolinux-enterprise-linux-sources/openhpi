@@ -1,7 +1,7 @@
 Summary: Hardware Platform Interface library and tools
 Name: openhpi
 Version: 2.14.1
-Release: 3%{?dist}.3
+Release: 6%{?dist}
 License: BSD
 Group: System Environment/Base
 URL: http://www.openhpi.org
@@ -10,16 +10,16 @@ Source1: %{name}.initd
 Source2: %{name}.sysconfig
 # https://sourceforge.net/tracker/?func=detail&aid=2932689&group_id=71730&atid=532251
 Patch0: openhpi-2.14.1-fumi-type.patch
-# https://bugzilla.redhat.com/show_bug.cgi?id=915336
+# https://bugzilla.redhat.com/show_bug.cgi?id=891626
 Patch1: openhpi-2.14.1-powersupplysensors.patch
-# https://bugzilla.redhat.com/show_bug.cgi?id=969003
+# https://bugzilla.redhat.com/show_bug.cgi?id=924852
 Patch2: openhpi-2.14.1-fan-missing-rdr.patch
-# https://bugzilla.redhat.com/show_bug.cgi?id=969004
+# https://bugzilla.redhat.com/show_bug.cgi?id=948386
 Patch3: openhpi-2.14.1-oa-failover-fix.patch
 Patch4: openhpi-2.14.1-oa-reconnect-fix.patch
-# https://bugzilla.redhat.com/show_bug.cgi?id=969005
+# https://bugzilla.redhat.com/show_bug.cgi?id=953515
 Patch5: openhpi-2.14.1-missing-thermal-sensors.patch
-# https://bugzilla.redhat.com/show_bug.cgi?id=969006
+# https://bugzilla.redhat.com/show_bug.cgi?id=953525
 Patch6: openhpi-2.14.1-thermal-info-segfault.patch
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 BuildRequires: libsysfs-devel, net-snmp-devel, OpenIPMI-devel, glib2-devel
@@ -164,20 +164,20 @@ fi
 
 
 %changelog
-* Thu May 30 2013 Dan Horák <dhorak@redhat.com> - 2.14.1-3.3
+* Thu May 30 2013 Dan Horák <dhorak@redhat.com> - 2.14.1-6
 - add explicit Requires for the main package
 
-* Fri Apr 19 2013 Dan Horák <dhorak@redhat.com> - 2.14.1-3.2
-- add mssing sensor RDRs for the fan resource (#969003)
-- fix openhpi connection failures with redundant OAs (#969004)
-- fix segfaults when retrieving thermal info (#969005)
-- add missing thermal sensors (#969006)
-- Resolves: #969003, #969004, #969003, #969006
+* Fri Apr 19 2013 Dan Horák <dhorak@redhat.com> - 2.14.1-5
+- add mssing sensor RDRs for the fan resource (#924852)
+- fix openhpi connection failures with redundant OAs (#948386)
+- fix segfaults when retrieving thermal info (#953515)
+- add missing thermal sensors (#953525)
+- Resolves: #924852, #948386, #953515, #953525
 
-* Thu Jan 24 2013 Dan Horák <dhorak@redhat.com> - 2.14.1-3.1
-- Fix support for Power Supply Serial/Part Numbers (#915336),
+* Thu Jan 24 2013 Dan Horák <dhorak@redhat.com> - 2.14.1-4
+- Fix support for Power Supply Serial/Part Numbers (#891626),
   patch by Michele Baldessari <michele@redhat.com>
-- Resolves: #915336
+- Resolves: #891626
 
 * Tue Mar  9 2010 Dan Horák <dhorak@redhat.com> - 2.14.1-3
 - switched to new initscript
