@@ -90,7 +90,7 @@ SaErrorT ov_rest_get_hotswap_state(void *oh_handler,
                                    SaHpiResourceIdT resource_id,
                                    SaHpiHsStateT *state)
 {
-        struct ov_rest_hotswap_state *hotswap_state = NULL;
+        struct ovRestHotswapState *hotswap_state = NULL;
         struct oh_handler_state *handler = NULL;
         SaHpiRptEntryT *rpt = NULL;
 
@@ -103,12 +103,13 @@ SaErrorT ov_rest_get_hotswap_state(void *oh_handler,
         handler = (struct oh_handler_state *) oh_handler;
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (rpt == NULL) {
-                err("failed to get rpt entry");
+                err("Failed to get rpt entry for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
 
         if (! (rpt->ResourceCapabilities & SAHPI_CAPABILITY_FRU)) {
-                err("Resource does not have FRU capability");
+                err("Resource of id %d does not have FRU capability",
+							resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
@@ -123,10 +124,11 @@ SaErrorT ov_rest_get_hotswap_state(void *oh_handler,
          } else {
 
                 /* Get the hotswap structure of MANAGED_HOTSWAP */
-                hotswap_state = (struct ov_rest_hotswap_state *)
+                hotswap_state = (struct ovRestHotswapState *)
                          oh_get_resource_data(handler->rptcache, resource_id);
                 if (hotswap_state == NULL) {
-                         err("Unable to get the resource private data");
+                         err("Unable to get the hotswap_state for the "
+					"resource id %d", resource_id);
                          return SA_ERR_HPI_INVALID_RESOURCE;
                 }
 
@@ -136,7 +138,8 @@ SaErrorT ov_rest_get_hotswap_state(void *oh_handler,
                 /* We can never have any resouce information in RPT 
                     with * NOT_PRESENT hotswap state Ideally, this 
                     code should never gets executed */
-                 err("Unexpected Hotswap state - NOT PRESENT.");
+                 err("Unexpected Hotswap state - NOT PRESENT for the "
+					"resource id %d", resource_id);
                  return  SA_ERR_HPI_INVALID_RESOURCE;
         }
 
@@ -248,7 +251,7 @@ SaErrorT ov_rest_request_hotswap_action(void *oh_handler,
                                         SaHpiHsActionT action)
 {
         SaErrorT rv = SA_OK;
-        struct ov_rest_hotswap_state *hotswap_state = NULL;
+        struct ovRestHotswapState *hotswap_state = NULL;
         struct oh_handler_state *handler = NULL;
         struct ov_rest_handler *ov_handler = NULL;
         SaHpiRptEntryT *rpt = NULL;
@@ -263,7 +266,8 @@ SaErrorT ov_rest_request_hotswap_action(void *oh_handler,
         ov_handler = (struct ov_rest_handler *) handler->data;
         rv = lock_ov_rest_handler(ov_handler);
         if (rv != SA_OK) {
-                err("OV REST handler is locked");
+                err("OV REST handler is locked while calling __func__"
+			" for resource id %d", resource_id);
                 return rv;
         }
 
@@ -275,21 +279,24 @@ SaErrorT ov_rest_request_hotswap_action(void *oh_handler,
 
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (rpt == NULL) {
-                err("Failed to get rpt entry");
+                err("Failed to get rpt entry for the resource id %d",
+							resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
 
         /* Check whether the resource has managed hotswap capability */
         if (! (rpt->ResourceCapabilities & SAHPI_CAPABILITY_MANAGED_HOTSWAP)) {
-                err("Resource does not have MANAGED_HOTSWAP capability");
+                err("Resource of id %d does not have MANAGED_HOTSWAP "
+					"capability", resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
         /* Get the hotswap structure from rpt entry */
-        hotswap_state = (struct ov_rest_hotswap_state *)
+        hotswap_state = (struct ovRestHotswapState *)
                 oh_get_resource_data(handler->rptcache, resource_id);
         if (hotswap_state == NULL) {
-                err("Unable to get the resource private data");
+                err("Unable to get the hotswap_state for the resouce id %d",
+								resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
 
@@ -311,7 +318,8 @@ SaErrorT ov_rest_request_hotswap_action(void *oh_handler,
                         else {
                                 err("Setting to INSERTION state is possible "
                                     "when the resource is in INACTIVE state.");
-                                err("The resource is not in INACTIVE state");
+                                err("The resource is not in INACTIVE state "
+					"for the resource id %d", resource_id);
                                 rv = SA_ERR_HPI_INVALID_REQUEST;
                         }
                         break;
@@ -333,13 +341,15 @@ SaErrorT ov_rest_request_hotswap_action(void *oh_handler,
                         else {
                                 err("Setting to EXTRACTION state is possible "
                                     "when the resource is in ACTIVE state.");
-                                err("The resource is not in ACTIVE state");
+                                err("The resource is not in ACTIVE state for"
+					" resource id %d", resource_id);
                                 rv = SA_ERR_HPI_INVALID_REQUEST;
                         }
                         break;
 
                 default:
-                        err("Invalid parameter");
+                        err("Invalid hotswap action %d for the resource id %d",
+				action, resource_id);
                         rv = SA_ERR_HPI_INVALID_PARAMS;
         }
         return SA_OK;

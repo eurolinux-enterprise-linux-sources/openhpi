@@ -2,17 +2,17 @@
 
 Summary:        Hardware Platform Interface library and tools
 Name:           openhpi
-Version:        3.7.0
-Release:        5%{?dist}
+Version:        3.8.0
+Release:        1%{?dist}
 License:        BSD
 Group:          System Environment/Base
 URL:            http://www.openhpi.org
 Source0:        http://downloads.sourceforge.net/%{name}/%{name}-%{version}.tar.gz
 # convert from initscript to systemd unit
 Patch0:         %{name}-3.4.0-systemd.patch
-# https://sourceforge.net/p/openhpi/bugs/1914/ breaks %%check
-Patch1:         %{name}-3.7.0-uid-revert.patch
+Patch1:         %{name}-3.6.1-ssl.patch
 Patch2:         %{name}-3.7.0-multilib.patch
+BuildRequires:  gcc-c++
 BuildRequires:  libsysfs-devel
 BuildRequires:  net-snmp-devel
 BuildRequires:  OpenIPMI-devel
@@ -72,14 +72,14 @@ The development libraries and header files for the OpenHPI project.
 %prep
 %setup -q
 %patch0 -p1 -b .systemd
-%patch1 -p1 -b .uid-revert
+%patch1 -p1 -b .ssl
 %patch2 -p1 -b .multilib
 
 autoreconf -vif
 
 # fix permissions
 chmod a-x plugins/simulator/*.[ch]
-chmod a-x clients/*.[ch]
+chmod a-x clients/hpipower.c
 
 # Fix ownership of config files and dirs for building/running tests as root
 # Due to security check the daemon breaks with error if the config file
@@ -93,7 +93,7 @@ fi
 
 %build
 export CFLAGS="$RPM_OPT_FLAGS -fno-strict-aliasing"
-%configure --disable-static --with-systemdsystemunitdir=%{_unitdir} --docdir=%{_datadir}/doc/%{name}-%{version}
+%configure --disable-static --with-systemdsystemunitdir=%{_unitdir} --docdir=%{_docdir}/%{name}-%{version}
 
 # Don't use rpath!
 sed -i 's|^hardcode_libdir_flag_spec=.*|hardcode_libdir_flag_spec=""|g' libtool
@@ -131,7 +131,10 @@ make check
 
 
 %files
-%doc README README.daemon openhpi.conf.example plugins/*/*.pdf
+%license %{_docdir}/%{name}-%{version}/COPYING
+%doc %{_docdir}/%{name}-%{version}/ChangeLog
+%doc %{_docdir}/%{name}-%{version}/README*
+%doc openhpi.conf.example plugins/*/*.pdf
 %dir %{_sysconfdir}/%{name}
 %config(noreplace) %{_sysconfdir}/%{name}/%{name}.conf
 %config(noreplace) %{_sysconfdir}/%{name}/%{name}client.conf
@@ -146,7 +149,6 @@ make check
 %{_mandir}/man8/*
 
 %files libs
-%doc COPYING
 %{_libdir}/*.so.*
 
 %files devel
@@ -156,6 +158,9 @@ make check
 
 
 %changelog
+* Fri Jul 13 2018 Than Ngo <than@redhat.com> - 3.8.0-1
+- Resolves: #1598856, update to 3.8.0
+
 * Mon Jan 08 2018 Than Ngo <than@redhat.com> - 3.7.0-5
 - Related: #1507619, add BR on net-snmp to fix the
   undefined reference issue

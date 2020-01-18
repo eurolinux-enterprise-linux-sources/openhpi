@@ -116,17 +116,21 @@ SaErrorT ov_rest_curl_get_request(REST_CON *connection,
 	struct curl_slist *chunk, CURL* curl, OV_STRING *st)
 {
 	char *Auth=NULL, *X_Auth_Token = NULL;
+	char *SessionId = NULL;
 	char curlErrStr[CURL_ERROR_SIZE+1];
-	asprintf(&Auth,OV_REST_AUTH,connection->auth);
+	WRAP_ASPRINTF(&Auth,OV_REST_AUTH,connection->auth);
+	WRAP_ASPRINTF(&SessionId,OV_REST_SESSIONID,connection->auth);
 	chunk = curl_slist_append(chunk, OV_REST_ACCEPT);
 	chunk = curl_slist_append(chunk, OV_REST_CHARSET);
 	chunk = curl_slist_append(chunk, OV_REST_CONTENT_TYPE);
 	chunk = curl_slist_append(chunk, OV_REST_X_API_VERSION);
 	chunk = curl_slist_append(chunk, Auth);
+	chunk = curl_slist_append(chunk, SessionId);
 	wrap_free(Auth);
-	if(connection->x_auth_token != NULL){
-		asprintf(&X_Auth_Token,OV_REST_X_AUTH_TOKEN,
-				connection->x_auth_token);
+	wrap_free(SessionId);
+	if(connection->xAuthToken != NULL){
+		WRAP_ASPRINTF(&X_Auth_Token,OV_REST_X_AUTH_TOKEN,
+				connection->xAuthToken);
 		chunk = curl_slist_append(chunk, X_Auth_Token);
 	}else {
 		err("Sessionkey for server single sign on is invalid/NULL");
@@ -182,7 +186,7 @@ SaErrorT ov_rest_curl_put_request(REST_CON *connection,
 {
 	char *Auth=NULL;
         char curlErrStr[CURL_ERROR_SIZE+1];
-	asprintf(&Auth,OV_REST_AUTH,connection->auth);
+	WRAP_ASPRINTF(&Auth,OV_REST_AUTH,connection->auth);
 	chunk = curl_slist_append(chunk, OV_REST_ACCEPT);
 	chunk = curl_slist_append(chunk, OV_REST_CHARSET);
 	chunk = curl_slist_append(chunk, OV_REST_CONTENT_TYPE);
@@ -245,7 +249,7 @@ SaErrorT ov_rest_login(REST_CON *connection, char* postfields)
 	rv = ov_rest_curl_put_request(connection, chunk, curlHandle, 
 			postfields, &s);
 	if(rv != SA_OK){
-		CRIT("ov_rest_login failed");
+		CRIT("Failed to login to OV");
 		return rv;
 	}
 	jobj = ov_rest_wrap_json_object_object_get(s.jobj, "sessionID");
@@ -296,6 +300,7 @@ SaErrorT ov_rest_connection_init(struct oh_handler_state *handler)
 	struct ov_rest_handler *ov_handler =
 		(struct ov_rest_handler *) handler->data;
 
+	ov_handler->discover_called_count = 0;
 	con = (REST_CON *) ov_handler->connection;
 
 	/* Get the Active OV hostname/IP address and check whether it's NULL */
@@ -307,8 +312,8 @@ SaErrorT ov_rest_connection_init(struct oh_handler_state *handler)
 			"OV_User_Name");
 	con->password = (char *) g_hash_table_lookup(handler->config,
 			"OV_Password");
-	asprintf(&con->url, OV_REST_LOGIN_URI, con->hostname);
-	asprintf(&postfields, OV_REST_LOGIN_POST ,con->username,con->password, 
+	WRAP_ASPRINTF(&con->url, OV_REST_LOGIN_URI, con->hostname);
+	WRAP_ASPRINTF(&postfields, OV_REST_LOGIN_POST ,con->username,con->password, 
 			"true");
 
 	rv =  ov_rest_login(con, postfields);
@@ -374,34 +379,31 @@ void ov_rest_prn_json_obj(char *key, struct json_object *val)
         type = json_object_get_type(val);
         switch (type) {
                    case json_type_null:
-                       dbg("\n %s = (null)\n",key);
+                       dbg("%s = (null)",key);
                        break;
                    case json_type_boolean:
-                       dbg("\n %s = %s\n",
+                       dbg("%s = (boolean) %s",
 			key, json_object_get_boolean(val)? "true": "false");
                        break;
                    case json_type_double:
-                       dbg("\n %s = %f\n",key, json_object_get_double(val));
+                       dbg("%s = (double) %f",key, json_object_get_double(val));
                        break;
                    case json_type_int:
-                       dbg("\n %s = %d\n",key, json_object_get_int(val));
+                       dbg("%s = (int) %d",key, json_object_get_int(val));
                        break;
                    case json_type_string:
-                       dbg("\n %s = %s\n",key, json_object_get_string(val));
+                       dbg("%s = (string) %s",key, json_object_get_string(val));
                        break;
                    case json_type_object:
-                       dbg("\nHmmm, not expecting an object. Printing and \n");
-                       dbg("\n %s = %s\n",key, json_object_get_string(val));
-                       dbg("\n Skipping \n");
+                       dbg("Hmmm, not expecting an object. Printing and");
+                       dbg("%s = (object as string) %s",key, json_object_get_string(val));
                        break;
                    case json_type_array:
-                       dbg("\n Hmmm, not expecting array. Printing and  \n");
-                       dbg("\n %s = %s\n",key, json_object_get_string(val));
-                       dbg("\n skipping \n");
+                       dbg("Hmmm, not expecting array. Printing and ");
+                       dbg("%s = (array as string) %s",key, json_object_get_string(val));
                        break;
                    default:
-                       dbg("\n ERROR, not expecting %d. What is this?\n",type);
-                       dbg("\n skipping \n");
+                       dbg("ERROR, not expecting %d. What is this?",type);
                        break;
        }
 }
@@ -487,11 +489,14 @@ int rest_enum(const char *enums, const char *value)
         int             len = 0;
 
         if (! value) {                  /* Can't proceed without a string */
-                err("could not find enum (NULL value) in \"%s\"", enums);
+                err("Could not find enum (NULL value) in \"%s\"", enums);
                 return(-1);
         }
 
         len = strlen(value);
+	if (len == 0)
+		return(-1);
+
         /* We have to search repeatedly, in case the match is just a substring
          * of an enum value.
          */
@@ -557,7 +562,7 @@ int  rest_get_request(REST_CON *conn, OV_STRING *response)
 	chunk = curl_slist_append(chunk, OV_REST_CONTENT_TYPE);
 	chunk = curl_slist_append(chunk, OV_REST_X_API_VERSION);
 
-	asprintf(&auth,"Auth: %s",conn->auth);
+	WRAP_ASPRINTF(&auth,"Auth: %s",conn->auth);
 	chunk = curl_slist_append(chunk, auth);
 	wrap_free(auth);
 
@@ -612,7 +617,7 @@ int  rest_put_request(REST_CON *conn, OV_STRING *response, char *postFields)
         chunk = curl_slist_append(chunk, OV_REST_CONTENT_TYPE);
         chunk = curl_slist_append(chunk, OV_REST_X_API_VERSION);
 
-        asprintf(&auth,"Auth: %s",conn->auth);
+        WRAP_ASPRINTF(&auth,"Auth: %s",conn->auth);
         chunk = curl_slist_append(chunk, auth);
         wrap_free(auth);
 
@@ -671,7 +676,7 @@ int  rest_patch_request(REST_CON *conn, OV_STRING *response, char *postFields)
 	chunk = curl_slist_append(chunk, OV_REST_CONTENT_TYPE);
 	chunk = curl_slist_append(chunk, OV_REST_X_API_VERSION);
 
-	asprintf(&auth,"Auth: %s",conn->auth);
+	WRAP_ASPRINTF(&auth,"Auth: %s",conn->auth);
 	chunk = curl_slist_append(chunk, auth);
 	wrap_free(auth);
 

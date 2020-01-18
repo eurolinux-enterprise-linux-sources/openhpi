@@ -294,47 +294,65 @@ int ov_rest_trim_alert_string(const char* alert, struct eventInfo *evtinfo)
 {
 	char dest[MAX_256_CHARS];
 	char trimmed_alert[MAX_256_CHARS];
-	int j = 0, ret = 0;
+	int j = 0, ret = 0, scount = 0;
 
 	if (( alert == NULL ) ||  (evtinfo == NULL)) {
 		err("Invalid parameters");
 		return(-1);
 	}
-		
+        memset(dest, 0, sizeof(char)*256);
+        memset(trimmed_alert, 0, sizeof(char)*256);
 	if (strlen(alert) >= 255 ) {
-		err("alert %s is too long %d",alert, (int)strlen(alert));
+		err("Alert %s is too long %d",alert, (int)strlen(alert));
 		strncpy(dest, alert, 255);
 		dest[255] = '\0';
 	} else
 		strcpy(dest, alert);
 
 	for (j = 0; dest[j] != '\0'; j++){
-		if(dest[j] == '.')
+		if(dest[j] == '.') {
 			dest[j] = ' ';
-	}
-	if(!strcmp(evtinfo->phyResourceType, "sas-interconnects")){
-        	ret = sscanf(dest, "hpris %*s %s %*d", trimmed_alert);
-	}else{
-        	ret = sscanf(dest, "hpris %*s %*d %*d %s", trimmed_alert);
-	}
-	if( ret != 1){
-		ret = sscanf(dest , "Trap %s", trimmed_alert);
-		if(ret !=1){
-			ret = sscanf(dest , "crm %s", trimmed_alert);
-			if(ret != 1){
-				ret = sscanf(dest , "swmon %s %*s %*s", 
-					trimmed_alert);
-			}
-			if( ret != 1){
-				err("ov_rest_json_parse_alerts: incorrect"
-					" alertTypeID string: %s", dest);
-				evtinfo->alertTypeId = rest_enum(eventType_S, 
-					"OEM_EVENT");
-				return 1;
-			}
+			scount++;
 		}
 	}
-	evtinfo->alertTypeId = rest_enum(eventType_S, trimmed_alert);
+	if(!evtinfo->phyResourceType){
+		warn("physicalResourceType is null for this alert, so setting "
+						"alertTypeId to OEM_EVENT");
+		evtinfo->alertTypeId = rest_enum(eventType_S,"OEM_EVENT");
+		return -1;		
+	}
+
+	if (strstr(dest, "hpris ")) {
+        	ret = sscanf(dest,"hpris %*s %*d %*d %s",trimmed_alert);
+	} else if (strstr(dest, "Trap ")) {
+		ret = sscanf(dest, "Trap %s", trimmed_alert);
+	} else if (strstr(dest, "crm ")) {
+		ret = sscanf(dest, "crm %s", trimmed_alert);
+	} else if (strstr(dest, "swmon ")) {
+		if (scount == 1)
+			ret = sscanf(dest, "swmon %s", trimmed_alert);
+		else if (scount == 2) 
+			ret = sscanf(dest, "swmon %*s %s", trimmed_alert);
+		else
+			ret = sscanf(dest, "swmon %s %*s %*s", trimmed_alert);
+	} else {
+		warn("alert string: %s is not important as of now", alert);
+		warn("Setting it as OEM_EVENT to handle generically");
+		evtinfo->alertTypeId = rest_enum(eventType_S, "OEM_EVENT");
+		return -1;		
+
+	}
+	if ( ret != 1 || strlen(trimmed_alert) == 0 )
+		evtinfo->alertTypeId = rest_enum(eventType_S, "OEM_EVENT");
+	else
+		evtinfo->alertTypeId = rest_enum(eventType_S, trimmed_alert);
+
+	/* Some alerts are too complex. Make them OEM_EVENTS */
+	if ( evtinfo->alertTypeId == -1 )
+		evtinfo->alertTypeId = rest_enum(eventType_S, "OEM_EVENT");
+
+	dbg("alert=%s, trimmed=%s enum=%d",alert, trimmed_alert, 
+			evtinfo->alertTypeId);
 	return ret;
 }
                                              
@@ -361,7 +379,7 @@ void ov_rest_json_parse_events( json_object *jobj, struct eventInfo* evtinfo)
 }
 
 /**
- * ov_rest_json_parse_alerts:
+ * ov_rest_json_parse_alerts_utility:
  *      @jobj    : Pointer to json_object.
  *      @evtinfo: Pointer to eventInfo.
  *
@@ -372,10 +390,10 @@ void ov_rest_json_parse_events( json_object *jobj, struct eventInfo* evtinfo)
  *      None.
  *
  **/
-void ov_rest_json_parse_alerts( json_object *jobj, struct eventInfo* evtinfo)
+void ov_rest_json_parse_alerts_utility( json_object *jobj, 
+				struct eventInfo* evtinfo)
 {
-	int ret;
-	json_object *associatedResource = NULL; 
+//	json_object *associatedResource = NULL; 
 
 	json_object * jvalue = jobj;
 	json_object_object_foreach(jvalue, key, val){
@@ -390,25 +408,24 @@ void ov_rest_json_parse_alerts( json_object *jobj, struct eventInfo* evtinfo)
 			evtinfo->resourceUri = json_object_get_string(val);
 			continue;
 		}
+		/* We are not using the commented code below, But it is for 
+ 		 * future purpose*/
+		/*
 		if(!strcmp(key,"associatedResource")){
 			associatedResource = 
 				ov_rest_wrap_json_object_object_get(jobj, 
 				"associatedResource");
-			ov_rest_json_parse_alerts(associatedResource, evtinfo);
+			ov_rest_json_parse_alerts_utility(associatedResource,
+								evtinfo);
 			continue;
 		}
+		*/
 		if(!strcmp(key,"physicalResourceType")){
 			evtinfo->phyResourceType = json_object_get_string(val);
 			continue;
 		}
 		if(!strcmp(key,"alertTypeID") || !strcmp(key,"name")){
 			evtinfo->alert_name = json_object_get_string(val);
-			ret = ov_rest_trim_alert_string(
-					json_object_get_string(val),
-					 evtinfo);
-			if(ret != 1){
-				dbg("Unknown alert. Skipping it for now");
-			}
 			continue;
 		}
 		if(!strcmp(key,"alertState")){
@@ -435,6 +452,32 @@ void ov_rest_json_parse_alerts( json_object *jobj, struct eventInfo* evtinfo)
 			evtinfo->correctiveAction = json_object_get_string(val);
 			continue;
 		}
+	}
+}
+
+/**
+ * ov_rest_json_parse_alerts:
+ *      @jobj    : Pointer to json_object.
+ *      @evtinfo: Pointer to eventInfo.
+ *
+ * Purpose:
+ *      First it invokes the ov_rest_json_parse_alerts_utility function to 
+ *      fully parse the received alert, and then ov_rest_trim_alert_string 
+ *      function trims the alerttypeID string using parsed alert infomration.
+ *
+ * Return:
+ *      None.
+ *
+ **/
+
+void ov_rest_json_parse_alerts( json_object *jobj, struct eventInfo* evtinfo)
+{
+	int ret;
+	ov_rest_json_parse_alerts_utility( jobj, evtinfo);
+	ret = ov_rest_trim_alert_string( evtinfo->alert_name,
+					evtinfo);
+	if(ret != 1){
+		dbg("Unknown alert.");
 	}
 }
 
@@ -548,8 +591,8 @@ void ov_rest_json_parse_interconnect( json_object *jvalue,
 			/* Checking for json object type, if it is not array, return */
 			if (bayLocation == NULL || (json_object_get_type(bayLocation)
 					 != json_type_array)) {
-				CRIT("bayLocation is NULL OR no interconnect "
-					"location array.");
+				CRIT("The bayLocation is NULL OR no "
+					"interconnect location array.");
 				return;
 			}
 			arraylen = json_object_array_length(bayLocation);
@@ -683,8 +726,32 @@ void ov_rest_json_parse_certificate( json_object *jobj,
  **/
 void ov_rest_json_parse_ca( json_object *jobj, struct certificates *response)
 {
-
-	response->ca = json_object_get_string(jobj);
+	json_object *member = NULL, *jvalue = NULL, *cert = NULL;
+	if(jobj == NULL){
+		err("Invalid Parameters");
+		return;
+	}
+	member = ov_rest_wrap_json_object_object_get(jobj, "members");
+	if(member){
+		jvalue = json_object_array_get_idx(member, 0);
+		if(jvalue == NULL){
+			err("Invalid Response");
+			return;
+		}
+		cert = ov_rest_wrap_json_object_object_get(jvalue, 
+						"certificateDetails");
+		if(!cert){
+			err("Invalid Response");
+			return;
+		}
+		json_object_object_foreach(cert, key, val){
+			if(!strcmp(key,"base64Data"))
+				response->ca = json_object_get_string(val);
+		}
+		
+	}else{
+		response->ca = json_object_get_string(jobj);
+	}
 }
 
 /**
@@ -774,6 +841,7 @@ void ov_rest_json_parse_appliance_Ha_node( json_object *jobj,
 				struct applianceHaNodeInfo *response)
 {
 	const char *temp = NULL;
+	json_object * jvalue = NULL;
 
 	json_object_object_foreach(jobj, key, val){
 		ov_rest_prn_json_obj(key, val);
@@ -821,8 +889,32 @@ void ov_rest_json_parse_appliance_Ha_node( json_object *jobj,
 					strlen(temp)+1);
 			continue;
 		}
-	}
+		if(!strcmp(key, "location")){
+			jvalue = ov_rest_wrap_json_object_object_get(jobj, 
+								"location");
+			ov_rest_json_parse_appliance_Ha_node(jvalue, response);
+			continue;
+		}
+		if(!strcmp(key, "bay")){
+			response->bayNumber = json_object_get_int(val);
+			continue;
 
+		}
+		if(!strcmp(key, "enclosure")){
+			jvalue = ov_rest_wrap_json_object_object_get(jobj, 
+								"enclosure");
+			ov_rest_json_parse_appliance_Ha_node(jvalue, response);
+			continue;
+		}
+		if(!strcmp(key, "resourceUri")){
+			temp = json_object_get_string(val);
+			if(temp != NULL)
+				 memcpy(response->enclosure_uri,temp,
+					strlen(temp)+1);	
+			continue;
+		}
+	}
+	response->type = SYNERGY_COMPOSER;
 }
 /**
  * ov_rest_json_parse_appliance_status:
@@ -1055,6 +1147,43 @@ void ov_rest_json_parse_enc_device_bays( json_object *jvalue,
 }
 
 /**
+ * ov_rest_json_parse_enc_manager_bays:
+ *      @jvalue  : Pointer to json_object.
+ *      @response: Pointer to enclosureInfo structure.
+ *
+ * Purpose:
+ *      Parses the json response for enclosure manager bays.
+ *
+ * Return:
+ *      None.
+ *
+ **/
+void ov_rest_json_parse_enc_manager_bays( json_object *jvalue,
+                                struct enclosureInfo *response)
+{
+        const char *temp = NULL;
+
+        json_object_object_foreach(jvalue, key, val){
+                if(!strcmp(key,"devicePresence")){
+                        response->presence = rest_enum(presence_S,
+                                                json_object_get_string(val));
+                        continue;
+                }
+                if(!strcmp(key,"bayNumber")){
+                        response->bayNumber = json_object_get_int(val);
+                        continue;
+                }
+                if(!strcmp(key,"fwVersion")){
+                        temp = json_object_get_string(val);
+                        if(temp)
+                                memcpy(response->hwVersion,temp,
+                                        strlen(temp)+1);
+                        continue;
+                }
+        }
+}	
+
+/**
  * ov_rest_json_parse_enclosure:
  *      @jvalue  : Pointer to json_object.
  *      @response: Pointer to enclosureInfo structure.
@@ -1134,6 +1263,10 @@ void ov_rest_json_parse_enclosure( json_object *jvalue,
 			temp = json_object_get_string(val);
 			if(temp)
 				memcpy(response->uidState,temp,strlen(temp)+1);
+			continue;
+		}
+		if(!strcmp(key,"applianceBayCount")){
+			response->composerBays = json_object_get_int(val);
 			continue;
 		}
 	}

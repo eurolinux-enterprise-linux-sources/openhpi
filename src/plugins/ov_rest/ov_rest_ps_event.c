@@ -83,7 +83,7 @@ SaErrorT process_powersupply_insertion_event( struct oh_handler_state *handler,
 	struct enclosureInfoArrayResponse enclosure_response = {0};
 	struct enclosureInfo enclosure_result = {{0}};
 	char* enclosure_doc = NULL;
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	json_object *jvalue_ps = NULL, *jvalue_ps_array = NULL;
 	SaHpiRptEntryT *enc_rpt = NULL;
 	GSList *asserted_sensors = NULL;
@@ -102,7 +102,7 @@ SaErrorT process_powersupply_insertion_event( struct oh_handler_state *handler,
 	/* FIXME: Shall we move below code in to a function as add_ps_unit to 
 	 * make it reusable in case
 	 */
-	asprintf(&ov_handler->connection->url, "https://%s%s",
+	WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
 			ov_handler->connection->hostname,
 			event->resourceUri);
 	rv = ov_rest_getenclosureInfoArray(handler, &enclosure_response,
@@ -131,10 +131,10 @@ SaErrorT process_powersupply_insertion_event( struct oh_handler_state *handler,
 	}
 	ov_rest_json_parse_powersupply(jvalue_ps, &response);
 	ov_rest_wrap_json_object_put(enclosure_response.root_jobj);
-	enclosure = (struct enclosure_status *)ov_handler->
+	enclosure = (struct enclosureStatus *)ov_handler->
 		ov_rest_resources.enclosure;
 	while(enclosure != NULL){
-		if(!strcmp(enclosure->serial_number,
+		if(!strcmp(enclosure->serialNumber,
 					enclosure_result.serialNumber)){
 			break;
 		}
@@ -153,7 +153,7 @@ SaErrorT process_powersupply_insertion_event( struct oh_handler_state *handler,
 	rv = ov_rest_build_powersupply_rpt(handler, &response, 
 			&resource_id, enc_loc);
 	if (rv != SA_OK) {
-		err("build PowerSupply rpt failed");
+		err("Build rpt failed for powersupply in bay %d", bayNumber);
 		wrap_free(enclosure_doc);
 		return rv;
 	}
@@ -166,15 +166,15 @@ SaErrorT process_powersupply_insertion_event( struct oh_handler_state *handler,
 	rv = ov_rest_build_powersupply_rdr(handler,
 			resource_id, &response);
 	if (rv != SA_OK) {
-		err("build enclosure rdr failed");
+		err("Build rdr failed for powersupply in bay %d", bayNumber);
 		/* Free the inventory info from inventory RDR */
 		rv = ov_rest_free_inventory_info(handler, resource_id);
 		if (rv != SA_OK) {
-			err("Inventory cleanup failed for resource id %d",
-					resource_id);
+			err("Inventory cleanup failed for powersupply in "
+				"bay %d", bayNumber);
 		}
 		oh_remove_resource(handler->rptcache, resource_id);
-		/* reset resource_status structure to default values */
+		/* reset resource_info structure to default values */
 		ov_rest_update_resource_status(
 				&enclosure->ps_unit,
 				response.bayNumber,
@@ -187,7 +187,8 @@ SaErrorT process_powersupply_insertion_event( struct oh_handler_state *handler,
 	rv = ov_rest_populate_event(handler, resource_id, &hs_event,
 			&asserted_sensors);
 	if (rv != SA_OK) {
-		err("Populating event struct failed");
+		err("Populating event struct failed for powersupply in bay %d",
+					bayNumber);
 		wrap_free(enclosure_doc);
 		return rv;
 	}
@@ -216,7 +217,7 @@ SaErrorT process_powersupply_insertion_event( struct oh_handler_state *handler,
  *      @event:   Pointer to OV REST event response structure
  *
  * Purpose:
- *      Rmoves power supply information from Resource Tabel (RPT)  and
+ *      Removes power supply information from Resource Tabel (RPT)  and
  *      Creates the hot swap event
  *
  * Detailed Description: NA
@@ -240,7 +241,7 @@ SaErrorT process_powersupply_removed_event( struct oh_handler_state *handler,
 	struct enclosureInfoArrayResponse enclosure_response = {0};
 	struct enclosureInfo enclosure_result = {{0}};
 	char* enclosure_doc = NULL;
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 
 	if (handler == NULL || event == NULL) {
 		err("Invalid parameters");
@@ -252,7 +253,7 @@ SaErrorT process_powersupply_removed_event( struct oh_handler_state *handler,
 		return SA_ERR_HPI_INVALID_PARAMS;
 	}
 	bayNumber = ov_rest_get_baynumber(event->resourceID);
-	asprintf(&ov_handler->connection->url, "https://%s%s",
+	WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
 			ov_handler->connection->hostname,
 			event->resourceUri);
 	rv = ov_rest_getenclosureInfoArray(handler, &enclosure_response,
@@ -268,22 +269,25 @@ SaErrorT process_powersupply_removed_event( struct oh_handler_state *handler,
 			&enclosure_result);
 	ov_rest_wrap_json_object_put(enclosure_response.root_jobj);
 
-	enclosure = (struct enclosure_status *)ov_handler->
+	enclosure = (struct enclosureStatus *)ov_handler->
 		ov_rest_resources.enclosure;
 	while(enclosure != NULL){
-		if(!strcmp(enclosure->serial_number,
+		if(!strcmp(enclosure->serialNumber,
 					enclosure_result.serialNumber)){
 			break;
 		}
 		enclosure = enclosure->next;
 	}
 	if(enclosure == NULL){
-		CRIT("Enclosure data of the powersupply is unavailable");
+		CRIT("Enclosure data of the powersupply in bay %d"
+			" is unavailable", bayNumber);
 		wrap_free(enclosure_doc);
 		return SA_ERR_HPI_INVALID_RESOURCE;
 	}
 	if(enclosure->ps_unit.presence[bayNumber - 1] == RES_ABSENT){
-		err("Extracted power supply unit may be in faulty condition");
+		err("Extracted power supply unit may be in faulty condition"
+				" in bay %d", bayNumber);
+		err("The power supply unit in bay %d is absent", bayNumber);
 		wrap_free(enclosure_doc);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
@@ -293,7 +297,7 @@ SaErrorT process_powersupply_removed_event( struct oh_handler_state *handler,
 	resource_id = enclosure->ps_unit.resource_id[bayNumber - 1];
 	rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
 	if (rpt == NULL) {
-		err("resource RPT is NULL");
+		err("RPT is NULL for powersupply in bay %d", bayNumber);
 		wrap_free(enclosure_doc);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
@@ -316,8 +320,8 @@ SaErrorT process_powersupply_removed_event( struct oh_handler_state *handler,
 	/* Free the inventory info from inventory RDR */
 	rv = ov_rest_free_inventory_info(handler, resource_id);
 	if (rv != SA_OK) {
-		err("Inventory cleanup failed for resource id %d",
-				rpt->ResourceId);
+		err("Inventory cleanup failed for powersupply in bay %d",
+				bayNumber);
 	}
 	/* Remove the resource from plugin RPTable */
 	rv = oh_remove_resource(handler->rptcache,

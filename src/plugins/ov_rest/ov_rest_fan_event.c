@@ -62,7 +62,7 @@
   * ov_rest_add_fan
   *      @handler: Pointer to openhpi handler structure
   *      @response:   pointer fanInfo structure
-  *	 @enclosure: Ponter to enclosure_status structure
+  *	 @enclosure: Ponter to enclosureStatus structure
   *
   *
   * Purpose:
@@ -77,7 +77,7 @@
   */
 SaErrorT ov_rest_add_fan(struct oh_handler_state *handler, 
 			struct fanInfo *response,
-			struct enclosure_status *enclosure)
+			struct enclosureStatus *enclosure)
 {
 	int enc_loc;
 	SaErrorT rv = SA_OK;
@@ -92,7 +92,7 @@ SaErrorT ov_rest_add_fan(struct oh_handler_state *handler,
         rv = ov_rest_build_fan_rpt(handler, response,
                                                 &resource_id, enc_loc);
         if (rv != SA_OK) {
-                err("build Fan rpt failed for the fan bay %d in "
+                err("Build Fan rpt failed for the fan bay %d in "
 				"enclosure resource id %d ", 
 				response->bayNumber, enclosure->enclosure_rid);
                 return rv;
@@ -112,11 +112,12 @@ SaErrorT ov_rest_add_fan(struct oh_handler_state *handler,
                 /* Free the inventory info from inventory RDR */
                 rv = ov_rest_free_inventory_info(handler, resource_id);
                 if (rv != SA_OK) {
-                        err("Inventory cleanup failed for fan resource id %d",
-                             resource_id);
+                        err("Inventory cleanup failed for fan in bay %d "
+				"with resource id %d", response->bayNumber,
+							resource_id);
                 }
                 oh_remove_resource(handler->rptcache, resource_id);
-                /* reset resource_status structure to default values */
+                /* reset resource_info structure to default values */
                 ov_rest_update_resource_status(
                               &enclosure->fan,
                               response->bayNumber,
@@ -128,7 +129,9 @@ SaErrorT ov_rest_add_fan(struct oh_handler_state *handler,
 	rv = ov_rest_populate_event(handler, resource_id, &event, 
 				&asserted_sensors);
 	if (rv != SA_OK) {
-		err("Populating event struct failed");
+		err("Populating event struct failed for the fan bay %d in "
+			"enclosure resource id %d", response->bayNumber,
+						enclosure->enclosure_rid);
 		return rv;
 	}
         event.event.EventType = SAHPI_ET_HOTSWAP;
@@ -170,7 +173,7 @@ SaErrorT process_fan_inserted_event( struct oh_handler_state *handler,
 	int bayNumber;
 	struct ov_rest_handler *ov_handler = NULL;
 	struct fanInfo response = {0};
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	struct enclosureInfo enclosure_result = {{0}};
 	struct enclosureInfoArrayResponse enclosure_response = {0};
 	char* enclosure_doc = NULL;
@@ -186,7 +189,7 @@ SaErrorT process_fan_inserted_event( struct oh_handler_state *handler,
 		return SA_ERR_HPI_INVALID_PARAMS;
 	}
 	bayNumber = ov_rest_get_baynumber(event->resourceID);
-        asprintf(&ov_handler->connection->url, "https://%s%s",
+        WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
                         ov_handler->connection->hostname,
 			event->resourceUri);
         rv = ov_rest_getenclosureInfoArray(handler, &enclosure_response,
@@ -202,8 +205,8 @@ SaErrorT process_fan_inserted_event( struct oh_handler_state *handler,
         /* Checking for json object type, if it is not array, return */
         if (jvalue_fan_array == NULL || (json_object_get_type(jvalue_fan_array)
                                                          != json_type_array)) {
-                CRIT("No Fan array in enclosure bay %d. Not adding Fan", 
-                        bayNumber);
+                CRIT("No Fan array in enclosure for fan bay %d. "
+			"Not adding Fan", bayNumber);
                 return SA_ERR_HPI_INVALID_DATA;
         }
 
@@ -214,10 +217,10 @@ SaErrorT process_fan_inserted_event( struct oh_handler_state *handler,
         }
         ov_rest_json_parse_fan(jvalue_fan, &response);
 	ov_rest_wrap_json_object_put(enclosure_response.root_jobj);
-        enclosure = (struct enclosure_status *)ov_handler->
+        enclosure = (struct enclosureStatus *)ov_handler->
 						ov_rest_resources.enclosure;
         while(enclosure != NULL){
-                if(!strcmp(enclosure->serial_number,
+                if(!strcmp(enclosure->serialNumber,
 				enclosure_result.serialNumber)){
                         break;
                 }
@@ -245,7 +248,7 @@ SaErrorT process_fan_inserted_event( struct oh_handler_state *handler,
  * ov_rest_remove_fan
  *      @handler: Pointer to openhpi handler structure
  *      @bayNumber: BayNumber/slot number of the fan
- *      @enclosure: Ponter to enclosure_status structure
+ *      @enclosure: Ponter to enclosureStatus structure
  *
  *
  * Purpose:
@@ -260,7 +263,7 @@ SaErrorT process_fan_inserted_event( struct oh_handler_state *handler,
  **/
 SaErrorT ov_rest_remove_fan(struct oh_handler_state *handler,
 		SaHpiInt32T bayNumber,
-		struct enclosure_status *enclosure)
+		struct enclosureStatus *enclosure)
 {
 	SaHpiResourceIdT resource_id;
 	SaErrorT rv = SA_OK;
@@ -270,8 +273,8 @@ SaErrorT ov_rest_remove_fan(struct oh_handler_state *handler,
         resource_id = enclosure->fan.resource_id[bayNumber - 1];
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (rpt == NULL) {
-                err("resource RPT is NULL for the fan resocuce ID %d",
-			resource_id);
+                err("RPT is NULL for the fan in bay %d with resocuce ID %d",
+					bayNumber, resource_id);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
         ov_rest_update_hs_event(handler, &hs_event);
@@ -293,8 +296,8 @@ SaErrorT ov_rest_remove_fan(struct oh_handler_state *handler,
         /* Free the inventory info from inventory RDR */
         rv = ov_rest_free_inventory_info(handler, resource_id);
         if (rv != SA_OK) {
-                err("Inventory cleanup failed for fan resource id %d",
-                     rpt->ResourceId);
+                err("Inventory cleanup failed for fan in bay %d with "
+			"resource id %d", bayNumber, rpt->ResourceId);
         }
         /* Remove the resource from plugin RPTable */
         rv = oh_remove_resource(handler->rptcache,
@@ -331,7 +334,7 @@ SaErrorT process_fan_removed_event( struct oh_handler_state *handler,
 	SaHpiInt32T bayNumber;
 	struct ov_rest_handler *ov_handler = NULL;
 	struct fanInfo response = {0};
-        struct enclosure_status *enclosure = NULL;
+        struct enclosureStatus *enclosure = NULL;
         struct enclosureInfo enclosure_result = {{0}};
         struct enclosureInfoArrayResponse enclosure_response = {0};
         char* enclosure_doc = NULL;
@@ -346,7 +349,7 @@ SaErrorT process_fan_removed_event( struct oh_handler_state *handler,
 		return SA_ERR_HPI_INVALID_PARAMS;
 	}
 	bayNumber = ov_rest_get_baynumber(event->resourceID);
-        asprintf(&ov_handler->connection->url, "https://%s%s",
+        WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
                         ov_handler->connection->hostname,
 			event->resourceUri);
         rv = ov_rest_getenclosureInfoArray(handler, &enclosure_response,
@@ -359,10 +362,10 @@ SaErrorT process_fan_removed_event( struct oh_handler_state *handler,
 					 &enclosure_result);
 	ov_rest_wrap_json_object_put(enclosure_response.root_jobj);
 
-        enclosure = (struct enclosure_status *)ov_handler->
+        enclosure = (struct enclosureStatus *)ov_handler->
 						ov_rest_resources.enclosure;
         while(enclosure != NULL){
-                if(!strcmp(enclosure->serial_number,
+                if(!strcmp(enclosure->serialNumber,
 				enclosure_result.serialNumber)){
                         break;
                 }

@@ -48,12 +48,12 @@
 int ov_rest_Total_Temp_Sensors = 0;
 
 static void ov_rest_push_disc_res(struct oh_handler_state *oh_handler);
+
 /**
  * ov_rest_getapplianceNodeInfo:
  *      @oh_handler: Pointer to openhpi handler.
  *      @response:   Pointer to the appliance info response structure.
  *      @connection: Pointer to connection structure.
- *      @appliance_doc: Char pointer to hold the appliance response doc.
  *
  * Purpose:
  *      This routine makes the request call to retrive the appliance
@@ -67,8 +67,7 @@ static void ov_rest_push_disc_res(struct oh_handler_state *oh_handler);
  **/
 SaErrorT ov_rest_getapplianceNodeInfo(struct oh_handler_state *oh_handler,
                 struct applianceNodeInfoResponse *response,
-                REST_CON *connection,
-                char* appliance_doc)
+                REST_CON *connection)
 {
 	SaErrorT rv = SA_OK;
 	OV_STRING s = {0};
@@ -283,6 +282,54 @@ SaErrorT ov_rest_getenclosureInfoArray(struct oh_handler_state *oh_handler,
 }
 
 /**
+ * ov_rest_getapplianceHANodeArray:
+ *      @oh_handler: Pointer to openhpi handler.
+ *      @response:   Pointer to appliance HA node info array response.
+ *      @connection: Pointer to connection structure.
+ *      @appliance_ha_info: Char pointer to hold the appliance response doc.
+ *
+ * Purpose:
+ *      This routine makes the request call to retrive the composer HA Node 
+ *      information in json object.
+ *
+ * Detailed Description: NA
+ *
+ * Return values:
+ *      SA_OK                     - on success
+ *      SA_ERR                    - on failure
+ **/
+SaErrorT ov_rest_getapplianceHANodeArray(struct oh_handler_state *oh_handler,
+		struct applianceHaNodeInfoArrayResponse* response,
+		REST_CON *connection,
+		char* appliance_ha_info)
+{
+	SaErrorT rv = SA_OK;
+	OV_STRING s = {0};
+	struct curl_slist *chunk = NULL;
+	curl_global_init(CURL_GLOBAL_ALL);
+	/* Get a curl handle */
+	CURL* curl = curl_easy_init();
+	rv = ov_rest_curl_get_request(connection, chunk, curl, &s);
+	if(s.jobj == NULL || s.len == 0){
+		return rv;
+	}else
+	{
+		response->root_jobj = s.jobj;
+		/*Getting the array if it is a key value pair*/
+		response->haNodeArray = 
+			ov_rest_wrap_json_object_object_get(s.jobj, "members");
+		if (!response->haNodeArray) {
+			response->haNodeArray = s.jobj;
+		}
+	}
+	wrap_free(s.ptr);
+	wrap_g_free(connection->url);
+	curl_easy_cleanup(curl);
+	curl_global_cleanup();
+	return SA_OK;
+}
+
+/**
  * ov_rest_getserverInfoArray:
  *      @oh_handler: Pointer to openhpi handler.
  *      @response:   Pointer to server hardware info array response structure.
@@ -359,7 +406,7 @@ SaErrorT ov_rest_getserverConsoleUrl(struct oh_handler_state *oh_handler,
 	CURL* curl = curl_easy_init();
 	ov_rest_curl_get_request(connection, chunk, curl, &s);
 	if(s.jobj == NULL || s.len == 0){
-		err("Invalid Response");
+		err("Invalid Response from getserverConsoleUrl");
 		wrap_g_free(connection->url);
 		curl_easy_cleanup(curl);
 		curl_global_cleanup();
@@ -372,7 +419,8 @@ SaErrorT ov_rest_getserverConsoleUrl(struct oh_handler_state *oh_handler,
 	        jobj = ov_rest_wrap_json_object_object_get(jobj, 
 						"remoteConsoleUrl");
 		if(!jobj){
-			err("Invalid Response");
+			err("Invalid Response from getserverConsoleUrl"
+                                   "for remoteConsoleUrl");
 			wrap_free(s.ptr);
 			ov_rest_wrap_json_object_put(s.jobj);
 			wrap_g_free(connection->url);
@@ -382,6 +430,7 @@ SaErrorT ov_rest_getserverConsoleUrl(struct oh_handler_state *oh_handler,
 		}
 	        console_url = json_object_get_string(jobj);
 		if(console_url == NULL){
+			err("Console url is NULL");
 			wrap_free(s.ptr);
 			ov_rest_wrap_json_object_put(s.jobj);
 			wrap_g_free(connection->url);
@@ -396,8 +445,8 @@ SaErrorT ov_rest_getserverConsoleUrl(struct oh_handler_state *oh_handler,
 				sso_url[i] = ' ';
 		}
 		sscanf(sso_url, "hplocons://addr %s %*s %s", 
-						connection->server_ilo,
-						connection->x_auth_token);
+						connection->serverIlo,
+						connection->xAuthToken);
         }
 	wrap_free(s.ptr);
 	ov_rest_wrap_json_object_put(s.jobj);
@@ -888,19 +937,20 @@ SaErrorT ov_rest_build_serverThermalRdr(struct oh_handler_state *oh_handler,
         }
 
         wrap_free(connection->url);
-        asprintf(&connection->url, OV_SERVER_HARDWARE_SSO_URI,
+        WRAP_ASPRINTF(&connection->url, OV_SERVER_HARDWARE_SSO_URI,
                                    connection->hostname, response->uri);
         rv = ov_rest_getserverConsoleUrl(oh_handler, connection);
         if (rv != SA_OK) {
-                err("Error in getting server Console Url");
+                err("Error in getting server Console Url for server"
+                          " in bay %d", response->bayNumber);
                 wrap_free(connection->url);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
-        if(connection->server_ilo && strlen(connection->server_ilo) &&
-                                     strcmp(connection->server_ilo,"0.0.0.0")){
+        if(connection->serverIlo && strlen(connection->serverIlo) &&
+                                     strcmp(connection->serverIlo,"0.0.0.0")){
                 wrap_free(connection->url);
-                asprintf(&connection->url, OV_SERVER_HARDWARE_THERMAL_URI,
-                                           connection->server_ilo);
+                WRAP_ASPRINTF(&connection->url, OV_SERVER_HARDWARE_THERMAL_URI,
+                                           connection->serverIlo);
                 rv = ov_rest_getserverThermalInfo(oh_handler,
                                                   &thermal_response,
                                                   connection);
@@ -909,7 +959,8 @@ SaErrorT ov_rest_build_serverThermalRdr(struct oh_handler_state *oh_handler,
                         rv = ov_rest_build_server_thermal_rdr(oh_handler,
                                         &thermal_response, rpt);
                         if (rv != SA_OK) {
-                                err("Building thermal sensor rdr failed");
+                                err("Building thermal sensor rdr failed"
+                                    " for server in bay %d", response->bayNumber);
                         }
                 }
                 else
@@ -957,19 +1008,20 @@ SaErrorT ov_rest_build_serverPowerStatusRdr(struct oh_handler_state
         }
 
         wrap_free(connection->url);
-        asprintf(&connection->url, OV_SERVER_HARDWARE_SSO_URI,
+        WRAP_ASPRINTF(&connection->url, OV_SERVER_HARDWARE_SSO_URI,
                                    connection->hostname, response->uri);
         rv = ov_rest_getserverConsoleUrl(oh_handler, connection);
         if (rv != SA_OK) {
-                err("Error in getting server Console Url");
+                err("Error in getting server Console Url for server"
+                    " in bay %d", response->bayNumber);
                 wrap_free(connection->url);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
-        if(connection->server_ilo && strlen(connection->server_ilo)&&
-                                    strcmp(connection->server_ilo,"0.0.0.0")){
+        if(connection->serverIlo && strlen(connection->serverIlo)&&
+                                    strcmp(connection->serverIlo,"0.0.0.0")){
                 wrap_free(connection->url);
-                asprintf(&connection->url, OV_SERVER_HARDWARE_POWER_STATUS_URI,
-                                           connection->server_ilo);
+                WRAP_ASPRINTF(&connection->url, OV_SERVER_HARDWARE_POWER_STATUS_URI,
+                                           connection->serverIlo);
                 rv = ov_rest_getserverPowerStatusInfo(oh_handler,
                                                       &power_response,
                                                       connection);
@@ -978,7 +1030,8 @@ SaErrorT ov_rest_build_serverPowerStatusRdr(struct oh_handler_state
                         rv = ov_rest_build_server_power_status_rdr(oh_handler,
                                                 &power_response, rpt);
                         if (rv != SA_OK) {
-                                err("Building power status sensor rdr failed");
+                                err("Building power status sensor rdr failed"
+                                    " for server in bay %d", response->bayNumber);
                         }
                 }
                 else
@@ -1026,19 +1079,20 @@ SaErrorT ov_rest_build_serverSystemsRdr(struct oh_handler_state *oh_handler,
         }
 
         wrap_free(connection->url);
-        asprintf(&connection->url, OV_SERVER_HARDWARE_SSO_URI,
+        WRAP_ASPRINTF(&connection->url, OV_SERVER_HARDWARE_SSO_URI,
                                    connection->hostname, response->uri);
         rv = ov_rest_getserverConsoleUrl(oh_handler, connection);
         if (rv != SA_OK) {
-                err("Error in getting server Console Url");
+                err("Error in getting server Console Url for server in"
+                    " bay %d", response->bayNumber);
                 wrap_free(connection->url);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
-        if(connection->server_ilo && strlen(connection->server_ilo)&&
-                                     strcmp(connection->server_ilo,"0.0.0.0")){
+        if(connection->serverIlo && strlen(connection->serverIlo)&&
+                                     strcmp(connection->serverIlo,"0.0.0.0")){
                 wrap_free(connection->url);
-                asprintf(&connection->url, OV_SERVER_HARDWARE_SYSTEMS_URI,
-                                           connection->server_ilo);
+                WRAP_ASPRINTF(&connection->url, OV_SERVER_HARDWARE_SYSTEMS_URI,
+                                           connection->serverIlo);
                 rv = ov_rest_getserverSystemsInfo(oh_handler,
                                                   &system_response,
                                                   connection);
@@ -1048,7 +1102,8 @@ SaErrorT ov_rest_build_serverSystemsRdr(struct oh_handler_state *oh_handler,
                         rv = ov_rest_build_server_systems_rdr(oh_handler,
                                                 &system_response, rpt);
                         if (rv != SA_OK) {
-                                err("Building system sensor rdr failed");
+                                err("Building system sensor rdr failed for"
+                                    " server in bay %d", response->bayNumber);
                         }
                 }
                 else
@@ -1096,19 +1151,20 @@ SaErrorT ov_rest_build_serverStorageRdr(struct oh_handler_state *oh_handler,
         }
 
         wrap_free(connection->url);
-        asprintf(&connection->url, OV_SERVER_HARDWARE_SSO_URI,
+        WRAP_ASPRINTF(&connection->url, OV_SERVER_HARDWARE_SSO_URI,
                                    connection->hostname, response->uri);
         rv = ov_rest_getserverConsoleUrl(oh_handler, connection);
         if (rv != SA_OK) {
-                err("Error in getting server Console Url");
+                err("Error in getting server Console Url for server in bay %d",
+                               response->bayNumber);
                 wrap_free(connection->url);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
-        if(connection->server_ilo && strlen(connection->server_ilo)&&
-                                     strcmp(connection->server_ilo,"0.0.0.0")){
+        if(connection->serverIlo && strlen(connection->serverIlo)&&
+                                     strcmp(connection->serverIlo,"0.0.0.0")){
                 wrap_free(connection->url);
-                asprintf(&connection->url,OV_SERVER_HARDWARE_SMART_STORAGE_URI,
-                                           connection->server_ilo);
+                WRAP_ASPRINTF(&connection->url,OV_SERVER_HARDWARE_SMART_STORAGE_URI,
+                                           connection->serverIlo);
                 rv = ov_rest_getserverStorageInfo(oh_handler,
                                                   &storage_response,
                                                   connection);
@@ -1117,7 +1173,8 @@ SaErrorT ov_rest_build_serverStorageRdr(struct oh_handler_state *oh_handler,
                         rv = ov_rest_build_server_storage_rdr(oh_handler,
                                                 &storage_response, rpt);
                         if (rv != SA_OK) {
-                                err("Build smart storage sensor rdr failed");
+                                err("Build smart storage sensor rdr failed for"
+                                    " server in bay %d", response->bayNumber);
                         }
                 }
                 else
@@ -1167,20 +1224,21 @@ SaErrorT ov_rest_build_serverNetworkAdaptersRdr(
         }
 
         wrap_free(connection->url);
-        asprintf(&connection->url, OV_SERVER_HARDWARE_SSO_URI,
+        WRAP_ASPRINTF(&connection->url, OV_SERVER_HARDWARE_SSO_URI,
                                    connection->hostname, response->uri);
         rv = ov_rest_getserverConsoleUrl(oh_handler, connection);
         if (rv != SA_OK) {
-                err("Error in getting server Console Url");
+                err("Error in getting server Console Url for server in bay %d",
+                           response->bayNumber);
                 wrap_free(connection->url);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
-        if(connection->server_ilo && strlen(connection->server_ilo)&&
-                                     strcmp(connection->server_ilo,"0.0.0.0")){
+        if(connection->serverIlo && strlen(connection->serverIlo)&&
+                                     strcmp(connection->serverIlo,"0.0.0.0")){
                 wrap_free(connection->url);
-                asprintf(&connection->url,
+                WRAP_ASPRINTF(&connection->url,
                                 OV_SERVER_HARDWARE_NETWORK_ADAPTERS_URI,
-                                connection->server_ilo);
+                                connection->serverIlo);
                 rv = ov_rest_getserverNetworkAdaptersInfo(oh_handler,
                                 &network_adapter_response, connection);
                 if(rv == SA_OK){
@@ -1188,7 +1246,9 @@ SaErrorT ov_rest_build_serverNetworkAdaptersRdr(
                         rv = ov_rest_build_server_network_adapters_rdr(
 				oh_handler, &network_adapter_response, rpt);
                         if (rv != SA_OK) {
-                                err("Build network adapter sensor rdr failed");
+                                err("Build network adapter sensor rdr failed "
+                                    		"for server in bay %d",
+						response->bayNumber);
                         }
                 }
                 else
@@ -1238,20 +1298,21 @@ SaErrorT ov_rest_build_serverEthernetInterfacesRdr(
         }
 
         wrap_free(connection->url);
-        asprintf(&connection->url, OV_SERVER_HARDWARE_SSO_URI,
+        WRAP_ASPRINTF(&connection->url, OV_SERVER_HARDWARE_SSO_URI,
                                    connection->hostname, response->uri);
         rv = ov_rest_getserverConsoleUrl(oh_handler, connection);
         if (rv != SA_OK) {
-                err("Error in getting server Console Url");
+                err("Error in getting server Console Url for server in bay %d",
+                             response->bayNumber);
                 wrap_free(connection->url);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
-        if(connection->server_ilo && strlen(connection->server_ilo)&&
-                                     strcmp(connection->server_ilo,"0.0.0.0")){
+        if(connection->serverIlo && strlen(connection->serverIlo)&&
+                                     strcmp(connection->serverIlo,"0.0.0.0")){
                 wrap_free(connection->url);
-                asprintf(&connection->url,
+                WRAP_ASPRINTF(&connection->url,
                                 OV_SERVER_HARDWARE_ETHERNET_INTERFACES_URI,
-                                connection->server_ilo);
+                                connection->serverIlo);
                 rv = ov_rest_getserverEthernetInterfacesInfo(oh_handler,
                                 &ethernet_inetrface_response, connection);
                 if(rv == SA_OK){
@@ -1262,7 +1323,8 @@ SaErrorT ov_rest_build_serverEthernetInterfacesRdr(
                                                 rpt);
                         if (rv != SA_OK) {
                                 err("Building ethernet interface sensor rdr"
-                                                                    " failed");
+                                    " failed for server in bay %d",
+                                              response->bayNumber);
                         }
                 }
                 else
@@ -1467,6 +1529,64 @@ SaErrorT ov_rest_getca(struct oh_handler_state *oh_handler,
 	return SA_OK;
 }
 
+/**
+ * ov_rest_session_timeout:
+ *      @ov_handler: Pointer to ov_rest plugin handler.
+ *      @to: Pointer to idleTimeout structure.
+ *
+ * Purpose:
+ *      Gets the timeout value to keep the session alive
+ *
+ * Detailed Description: 
+ *      This was created to keep the session alive by getting the 
+ *      idleTimeout value of the session.
+ *
+ * Return values:
+ *     SA_OK 			- On Success.
+ *     SA_ERR_HPI_INVALID_SESSION	- No AuthToken for SSO
+ *     SA_ERR_HPI_TIMEOUT	     - CURLE TIMEOUT
+ *     SA_ERR_HPI_INTERNAL_ERROR     - On all other CURL errors.
+ **/
+SaErrorT ov_rest_session_timeout(struct ov_rest_handler *ov_handler, 
+		struct idleTimeout *to)
+{
+	SaErrorT rv = SA_OK;
+	OV_STRING s = {0};
+	const char *ecode = NULL;
+	/* struct timeoutResponse response = {0}; */
+	/* json_object *timeoutResponse = NULL;  */
+	struct curl_slist *chunk = NULL;
+	curl_global_init(CURL_GLOBAL_ALL);
+	/* Get a curl handle */
+	CURL* curl = curl_easy_init();
+	WRAP_ASPRINTF(&ov_handler->connection->url, OV_GET_IDLE_TIMEOUT_URI,
+				ov_handler->connection->hostname);
+	rv = ov_rest_curl_get_request(ov_handler->connection, chunk, curl, &s);
+	if(s.jobj == NULL || s.len == 0 || rv != SA_OK) {
+		err("Get session idleTimeout failed");
+                return rv;
+        } 
+	json_object_object_foreach(s.jobj, key, val) {
+		ov_rest_prn_json_obj(key, val);
+		if(!strcmp(key,"idleTimeout")) 
+			to->timeout = json_object_get_int(val);
+		if(!strcmp(key,"errorCode"))
+			ecode = json_object_get_string(val);
+	}
+
+	if (ecode != NULL || to->timeout == 0) {
+		CRIT("Session error %s or timeout=%d", ecode, to->timeout);
+		rv = SA_ERR_HPI_INTERNAL_ERROR;
+	}
+
+	wrap_free(s.ptr);
+	ov_rest_wrap_json_object_put(s.jobj);
+	wrap_g_free(ov_handler->connection->url);
+	curl_easy_cleanup(curl);
+	curl_global_cleanup();
+	return rv;
+}
+	
 /*
  * ov_rest_discover_resources
  *      @oh_handler: Pointer to openhpi handler
@@ -1502,6 +1622,8 @@ SaErrorT ov_rest_discover_resources(void *oh_handler)
 	GError **error = NULL;
 	struct oh_handler_state *handler = NULL;
 	struct ov_rest_handler *ov_handler = NULL;
+	struct idleTimeout sess_timeout = {0};
+	static int mtl = 480; /* Max timeout loops 86400000/(1000*60*3) */
 
 	handler = (struct oh_handler_state *) oh_handler;
 	ov_handler = (struct ov_rest_handler *) handler->data;
@@ -1519,17 +1641,7 @@ SaErrorT ov_rest_discover_resources(void *oh_handler)
                 return SA_OK;
         }
 
-	/* Take the mutex here. Because discover thread and event thread 
- 	 * may invoke this function */
 	wrap_g_mutex_lock(ov_handler->mutex);
-	if(g_thread_self() == ov_handler->thread_handler){
-		/* Event thread wants to re discover the resources.
- 		 * Set the ov_handler->status to PRE_DISCOVERY
- 		 */
-		ov_handler->status = PRE_DISCOVERY;
-		err("Event thread invoked ov_rest_discover_resources()"
-			" to re discover the resources");
-	}
 	switch(ov_handler->status) {
 		case PRE_DISCOVERY:
 			dbg("First discovery");
@@ -1543,15 +1655,57 @@ SaErrorT ov_rest_discover_resources(void *oh_handler)
 			}
 			break;
 		case DISCOVERY_FAIL:
-			err("Discovery failed for OV IP %s", 
+			err("Re-discovery, after failure, for Synergy %s", 
 				ov_handler->connection->hostname);
-			break;
+			rv = ov_rest_connection_init(handler);
+			if(rv != SA_OK) {
+				err("Please check whether the Synergy "
+					"Composer %s is accessible",
+					ov_handler->connection->hostname);
+				wrap_g_mutex_unlock(ov_handler->mutex);
+				return rv;
+			}
+			rv = ov_rest_re_discover_resources(handler);
+			if (rv != SA_OK) {
+				err("Re-discovery failed ");
+				wrap_g_mutex_unlock(ov_handler->mutex);
+				return rv;
+			}
+			ov_handler->status = DISCOVERY_COMPLETED;
+			wrap_g_mutex_unlock(ov_handler->mutex);
+			err("Re-discovery successfull");
+			return rv;
+
 		case DISCOVERY_COMPLETED:
 			dbg("Discovery already done");
+			/* Call a function to keep the session alive */
+			rv = ov_rest_session_timeout(ov_handler,&sess_timeout);
+			if (( ov_handler->discover_called_count == 0 ) &&
+				( sess_timeout.timeout != 0 )) {
+				mtl = sess_timeout.timeout/(1000*60*3);
+				dbg("idleTimeout=%d and max loops=%d",
+					sess_timeout.timeout, mtl);
+			}
+			if (( rv == SA_OK ) &&
+				( ov_handler->discover_called_count < mtl-3 )) {
+				ov_handler->discover_called_count++;
+                                wrap_g_mutex_unlock(ov_handler->mutex);
+                                return rv;
+                        }
+			rv = ov_rest_connection_init(handler);
+			if(rv != SA_OK){
+				err("Please check whether the Synergy "
+					"Composer %s is accessible",
+					ov_handler->connection->hostname);
+				wrap_g_mutex_unlock(ov_handler->mutex);
+				return rv;
+			}
 			wrap_g_mutex_unlock(ov_handler->mutex);
-			return SA_OK;
+			return rv;
+
 		default:
-			err("Wrong ov_rest handler state detected");
+			err("Wrong ov_rest handler state %d detected",
+                              ov_handler->status);
 			wrap_g_mutex_unlock(ov_handler->mutex);
 			return SA_ERR_HPI_INTERNAL_ERROR;
 	}
@@ -1572,23 +1726,6 @@ SaErrorT ov_rest_discover_resources(void *oh_handler)
 	if(rv != SA_OK) {
 		err("Discovery Failed");
 		ov_handler->status = DISCOVERY_FAIL;
-		if(g_thread_self() == ov_handler->thread_handler){
-			/* Event thread faild to re discover the resources.
-	 		 * Set the ov_handler->status back to 
-	 		 * DISCOVERY_COMPLETED, to avoid discovery thread,
-	 		 * entering the discovery code.
-	 		 * Event thread will enter again with proper connection
-	 		 * information to re discover again.
- 			 */
-			ov_handler->status = DISCOVERY_COMPLETED;
-			err("Event thread invoked ov_rest_discover_resources()"
-				" and faild to re discover the resources");
-		}
-		
-		/* Cleanup the RPTable which may have partially discovered
- 		 * resource information.
- 		 */
-                ov_rest_clean_rptable(oh_handler);
 		wrap_g_mutex_unlock(ov_handler->mutex);
                 return rv;
 	}
@@ -1655,11 +1792,27 @@ SaErrorT discover_ov_rest_system(struct oh_handler_state *handler)
                      g_thread_self());
                 return SA_OK;
         }
+	dbg(" Discovering Composers ...................");
+	rv = ov_rest_discover_composer(handler);
+	if (rv != SA_OK) {
+		err("Failed to discover Composers");
+		return rv;
+	}
+        if (ov_handler->shutdown_event_thread == SAHPI_TRUE) {
+                dbg("shutdown_event_thread set. Returning in thread %p",
+                     g_thread_self());
+                return SA_OK;
+        }
         dbg(" Discovering Blades ...................");
         rv = ov_rest_discover_server(handler);
         if (rv != SA_OK) {
                 err("Failed to discover Server Blade");
                 return rv;
+        }
+        if (ov_handler->shutdown_event_thread == SAHPI_TRUE) {
+                dbg("shutdown_event_thread set. Returning in thread %p",
+                     g_thread_self());
+                return SA_OK;
         }
 
         dbg(" Discovering Drive Enclosures ...................");
@@ -1726,6 +1879,9 @@ SaErrorT discover_ov_rest_system(struct oh_handler_state *handler)
  *
  * Purpose:
  *      Discovers the appliance.
+ *      We want a top level entity path that is not removable.
+ *      Appliance is a top level Synergy ring representation.
+ *      Active composer represents Synergy ring
  *
  * Detailed Description: NA
  *
@@ -1738,66 +1894,80 @@ SaErrorT ov_rest_discover_appliance(struct oh_handler_state *handler)
 	SaErrorT rv = 0;
 	struct ov_rest_handler *ov_handler = NULL;
 	struct applianceNodeInfoResponse response = {0};
-	struct applianceHaNodeInfoResponse ha_response = {0};
+	struct applianceHaNodeInfoArrayResponse ha_array_response = {0};
 	struct applianceNodeInfo result = {{{0}}};
 	struct applianceHaNodeInfo ha_node_result = {{0}};
 	SaHpiResourceIdT resource_id;
-	char* appliance_version_doc = NULL, *s = NULL;
-	
+	char* s = NULL;
+	char *appliance_array_doc = NULL;
+	char active_sno[MAX_256_CHARS] = "\0";
+
 	ov_handler = (struct ov_rest_handler *) handler->data;
+
 	memset(&response,0, sizeof(struct applianceNodeInfoResponse));
-	asprintf(&ov_handler->connection->url, OV_APPLIANCE_VERSION_URI, 
-		ov_handler->connection->hostname);
+	WRAP_ASPRINTF(&ov_handler->connection->url, OV_APPLIANCE_VERSION_URI, 
+			ov_handler->connection->hostname);
 	rv = ov_rest_getapplianceNodeInfo(handler, &response, 
-		ov_handler->connection, appliance_version_doc);
+			ov_handler->connection);
 	if(rv != SA_OK || response.applianceVersion == NULL) {
 		CRIT("Failed to get the response from ov_rest_getappliance\n");
-		wrap_g_free(appliance_version_doc);
 		return rv;
 	}
 	ov_rest_json_parse_appliance_version(response.applianceVersion,
-						&result.version);
+			&result.version);
 
-	asprintf(&ov_handler->connection->url, OV_APPLIANCE_HA_NODE_ID_URI, 
-		ov_handler->connection->hostname, result.version.serialNumber);
-	rv = ov_rest_getapplianceHaNodeInfo(&ha_response, 
-					ov_handler->connection);
-	if(rv != SA_OK) {
-		CRIT("Failed to get the response for Active HA Node \n");
-		return rv;
-	}
-	ov_rest_json_parse_appliance_Ha_node(ha_response.haNode,
-					&ha_node_result);
-		
 	ov_rest_wrap_json_object_put(response.root_jobj);
-	ov_rest_wrap_json_object_put(ha_response.root_jobj);
-	rv = ov_rest_build_appliance_rpt(handler, &ha_node_result, 
-						&resource_id);
-	if (rv != SA_OK) {
-		err("build appliance rpt failed");
-		wrap_g_free(appliance_version_doc);
+
+	WRAP_ASPRINTF(&ov_handler->connection->url, OV_APPLIANCE_HA_NODE_ID_URI, 
+			ov_handler->connection->hostname, 
+			result.version.serialNumber);
+	strncpy(active_sno, result.version.serialNumber, MAX_256_CHARS-1);
+	active_sno[MAX_256_CHARS-1] = '\0';
+
+	rv = ov_rest_getapplianceHANodeArray(handler, &ha_array_response, 
+			ov_handler->connection, appliance_array_doc); 
+
+	if(rv != SA_OK || ha_array_response.haNodeArray == NULL) {
+		CRIT("No response from ov_rest_getapplianceHANodeArray");
 		return rv;
 	}
+	ov_rest_json_parse_appliance_Ha_node(
+			ha_array_response.haNodeArray,
+			&ha_node_result);
 
-	/* Save appliance resource id */
-	ov_handler->ov_rest_resources.composer.resource_id = resource_id;
-	strcpy(ov_handler->ov_rest_resources.composer.serial_number,
-					result.version.serialNumber);
-        itostr(resource_id ,&s);
-        g_hash_table_insert(ov_handler->uri_rid, g_strdup(result.version.uri), 
-				g_strdup(s));
+	ov_rest_wrap_json_object_put(ha_array_response.root_jobj);
+
+	if (strcmp(ha_node_result.role, "Active") == 0) {
+		if(strstr(ha_node_result.uri, active_sno) == NULL) {  
+			CRIT("Active composer uri %s and sno %s differ",
+					ha_node_result.uri, active_sno);
+		}
+		rv = ov_rest_build_appliance_rpt(handler, 
+				&ha_node_result, &resource_id, "Active");
+		if (rv != SA_OK) {
+			err("Build appliance rpt failed for resource id %d",
+							resource_id);
+			return rv;
+		}
+		/* Save appliance resource id */
+		ov_handler->ov_rest_resources.composer.resource_id = 
+			resource_id;
+		strcpy(ov_handler->ov_rest_resources.composer.serialNumber,
+				result.version.serialNumber);
+	}
+	itostr(resource_id ,&s);
+	g_hash_table_insert(ov_handler->uri_rid, 
+			g_strdup(result.version.uri), g_strdup(s));
 	wrap_free(s);
-
-	rv = ov_rest_build_appliance_rdr(handler, &result,
-			&ha_node_result, resource_id);
+	rv = ov_rest_build_appliance_rdr(handler, 
+			&result, &ha_node_result, resource_id);
 	if (rv != SA_OK) {
-		err("build appliance rdr failed");
+		err("Build appliance rdr failed for resource id %d",
+							resource_id);
 		wrap_free(s);
-		wrap_g_free(appliance_version_doc);
 		return rv;
 	}
-	wrap_g_free(appliance_version_doc);
-        return SA_OK;
+	return SA_OK;
 }
 
 /**
@@ -1824,20 +1994,24 @@ SaErrorT ov_rest_discover_appliance(struct oh_handler_state *handler)
  **/
 SaErrorT ov_rest_build_appliance_inv_rdr(struct oh_handler_state *oh_handler,
                                  struct applianceNodeInfo *response,
+                                 struct applianceHaNodeInfo *ha_response,
                                  SaHpiRdrT *rdr,
                                  struct ov_rest_inventory **inventory)
 {
 	SaErrorT rv = SA_OK;
 	SaHpiIdrFieldT hpi_field;
-	char appliance_inv_str[] = APPLIANCE_INVENTORY_STRING;
+	char appliance_inv_str[] = APPLIANCE_INVENTORY_STRING, *tmp = NULL;
 	struct ov_rest_inventory *local_inventory = NULL;
-	struct ov_rest_area *head_area = NULL;
+	struct ovRestArea *head_area = NULL;
 	SaHpiInt32T add_success_flag = 0;
 	SaHpiInt32T product_area_success_flag = 0;
 	SaHpiInt32T area_count = 0;
 	struct ov_rest_handler *ov_handler = NULL;
 	SaHpiResourceIdT resource_id;
 	SaHpiRptEntryT *rpt = NULL;
+	SaHpiFloat64T fm_version;
+	SaHpiInt32T major;
+
 	if (oh_handler == NULL || response == NULL || rdr == NULL ||
 			inventory == NULL) {
 		err("Invalid parameter.");
@@ -1849,7 +2023,7 @@ SaErrorT ov_rest_build_appliance_inv_rdr(struct oh_handler_state *oh_handler,
 	/* Get the rpt entry of the resource */
 	rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
 	if (rpt == NULL) {
-		err("resource RPT is NULL");
+		err("Appliance RPT is NULL for resource id %d", resource_id);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 
@@ -1870,7 +2044,8 @@ SaErrorT ov_rest_build_appliance_inv_rdr(struct oh_handler_state *oh_handler,
 	local_inventory = (struct ov_rest_inventory*)
 		g_malloc0(sizeof(struct ov_rest_inventory));
 	if (!local_inventory) {
-		err("OV REST out of memory");
+		err("OV REST out of memory while building appliance inventory"
+			" rdr for resource id %d", resource_id);
 		return SA_ERR_HPI_OUT_OF_MEMORY;
 	}
 	local_inventory->inv_rec.IdrId = rdr->RdrTypeUnion.InventoryRec.IdrId;
@@ -1892,7 +2067,8 @@ SaErrorT ov_rest_build_appliance_inv_rdr(struct oh_handler_state *oh_handler,
 			"HPE",
 			&add_success_flag);
 	if (rv != SA_OK) {
-		err("Add product area failed");
+		err("Add product area failed for appliance id %d",
+							resource_id);
 		return rv;
 	}
 
@@ -1917,7 +2093,8 @@ SaErrorT ov_rest_build_appliance_inv_rdr(struct oh_handler_state *oh_handler,
 			response->version.serialNumber,
 			&add_success_flag);
 	if (rv != SA_OK) {
-		err("Add chassis area failed");
+		err("Add chassis area failed  for the appliance id %d",
+							resource_id);
 		return rv;
 	}
 	if (add_success_flag != SAHPI_FALSE) {
@@ -1953,7 +2130,42 @@ SaErrorT ov_rest_build_appliance_inv_rdr(struct oh_handler_state *oh_handler,
 					->info.area_list->field_list),
 					&hpi_field);
 			if (rv != SA_OK) {
-				err("Add idr field failed");
+				err("Add idr softwareVersion field failed for "
+					"the appliance id %d", resource_id);
+				return rv;
+			}
+
+			/* Increment the field counter */
+			local_inventory->info.area_list->idr_area_head.
+				NumFields++;
+			
+			/* Check whether Firmware version is NULL. */
+			if (!response->version.softwareVersion) {
+				err("Firmware version is not vailable for the"
+					"resource %d", resource_id);
+				return SA_ERR_HPI_INTERNAL_ERROR;
+			}
+			/* Store Firmware MajorRev & MinorRev data in rpt */
+			fm_version = atof(response->version.softwareVersion);
+			rpt->ResourceInfo.FirmwareMajorRev = major =
+					(SaHpiUint8T)floor(fm_version);
+			rpt->ResourceInfo.FirmwareMinorRev = rintf((
+					fm_version - major) * 100);
+		}
+		if (ha_response->uri != NULL) {
+			hpi_field.AreaId = local_inventory->info.area_list->
+					idr_area_head.AreaId;
+			hpi_field.Type = SAHPI_IDR_FIELDTYPE_CUSTOM;
+			WRAP_ASPRINTF(&tmp,"URI = %s",ha_response->uri);
+			strcpy ((char *)hpi_field.Field.Data, tmp);
+			wrap_free(tmp);
+
+			rv = ov_rest_idr_field_add(&(
+				local_inventory->info.area_list->field_list),
+				&hpi_field);
+			if (rv != SA_OK) {
+				err("Add idr uri field failed for the "
+                                         "appliance id %d", resource_id);
 				return rv;
 			}
 
@@ -1977,7 +2189,7 @@ SaErrorT ov_rest_build_appliance_inv_rdr(struct oh_handler_state *oh_handler,
  *      Pushes the RDR entry to plugin RPTable
  *
  * Detailed Description:
- *         - Creates the enclosure inventory RDR
+ *         - Creates the appliance RDR
  *
  * Return values:
  *      SA_OK                     - on success.
@@ -2003,16 +2215,18 @@ SaErrorT ov_rest_build_appliance_rdr(struct oh_handler_state *oh_handler,
 
         /* Build inventory rdr for the appliance */
         memset(&rdr, 0, sizeof(SaHpiRdrT));
-        rv = ov_rest_build_appliance_inv_rdr(oh_handler, response, &rdr, 
-				&inventory);
+        rv = ov_rest_build_appliance_inv_rdr(oh_handler, response, ha_response,
+				&rdr, &inventory);
         if (rv != SA_OK) {
-                err("Failed to Add appliance inventory RDR");
+                err("Failed to Add appliance inventory RDR for the resource "
+				"id %d", resource_id);
                 return rv;
         }
 
         rv = oh_add_rdr(oh_handler->rptcache, resource_id, &rdr, inventory, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add rdr for appliance resource id %d",
+								resource_id);
                 return rv;
         }
 
@@ -2044,9 +2258,11 @@ SaErrorT ov_rest_build_appliance_rdr(struct oh_handler_state *oh_handler,
  *      @oh_handler:  Pointer to openhpi handler.
  *      @name:        Pointer to the name of the appliance.
  *      @resource_id: Pointer to the resource id.
+ *      @type:  Active / Standby.
  *
  * Purpose:
  *      Builds the appliance RPT entry.
+ *      All non-active appliances are added under the respective enclisures.
  *      Pushes the RPT entry to plugin RPTable.
  *
  * Detailed Description: NA
@@ -2058,32 +2274,58 @@ SaErrorT ov_rest_build_appliance_rdr(struct oh_handler_state *oh_handler,
  **/
 SaErrorT ov_rest_build_appliance_rpt(struct oh_handler_state *oh_handler,
                              struct applianceHaNodeInfo *response,
-                             SaHpiResourceIdT *resource_id)
+                             SaHpiResourceIdT *resource_id, char *type)
 {
 	SaErrorT rv = SA_OK;
 	SaHpiEntityPathT entity_path = {{{0}}};
 	struct ov_rest_handler *ov_handler = NULL;
-	char *entity_root = NULL;
+	char *entity_root = NULL, *enclosure_doc = NULL;
+	struct ovRestHotswapState * hotswap_state = NULL;
+	SaHpiPowerStateT state = {0};
+	struct applianceInfo appliancebay_info = {{0}};
+	struct enclosureInfoArrayResponse enc_response = {0};
+	json_object* jvalue_comp_array = NULL, *jvalue_composer = NULL;
 	SaHpiRptEntryT rpt = {0};
 
 	if (oh_handler == NULL || response == NULL) {
 		err("Invalid parameters");
 		return SA_ERR_HPI_INVALID_PARAMS;
 	}
-
 	ov_handler = (struct ov_rest_handler *) oh_handler->data;
 	if(ov_handler == NULL) {
 		err("Invalid parameters");
 		return SA_ERR_HPI_INVALID_PARAMS;
 	}
-
+	WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
+			ov_handler->connection->hostname,
+			response->enclosure_uri);
+	rv = ov_rest_getenclosureInfoArray(oh_handler, &enc_response,
+			ov_handler->connection, enclosure_doc);
+	if(rv != SA_OK || enc_response.enclosure_array == NULL) {
+		CRIT("No response from ov_rest_getenclosureInfoArray");
+		return rv;
+	}
+	jvalue_comp_array = ov_rest_wrap_json_object_object_get(
+			enc_response.enclosure_array,
+			"applianceBays");
+	jvalue_composer = 
+		json_object_array_get_idx(jvalue_comp_array, 
+				response->bayNumber-1);
+	if (!jvalue_composer) {
+		CRIT("Invalid response for the composer"
+				" in bay %d", response->bayNumber);
+		return SA_ERR_HPI_INTERNAL_ERROR;	
+	}
+	ov_rest_json_parse_applianceInfo(jvalue_composer,
+			&appliancebay_info);
+	ov_rest_wrap_json_object_put(enc_response.root_jobj);
 	/* Fetch and encode the entity path required for the rpt field */
 	entity_root = (char *) g_hash_table_lookup(oh_handler->config,
 			"entity_root");
 	memset(&entity_path, 0, sizeof(SaHpiEntityPathT));
 	rv = oh_encode_entitypath(entity_root, &entity_path);
 	if (rv != SA_OK) {
-		err("Encoding entity path failed");
+		err("Encoding entity path failed for the appliance");
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 	/* Populate the rpt with the details of the appliance */
@@ -2095,35 +2337,249 @@ SaErrorT ov_rest_build_appliance_rpt(struct oh_handler_state *oh_handler,
 		SAHPI_CAPABILITY_CONTROL ;
 	rpt.ResourceEntity.Entry[0].EntityType = SAHPI_ENT_ROOT;
 	rpt.ResourceEntity.Entry[0].EntityLocation = 0;
-
 	rv = oh_concat_ep(&(rpt.ResourceEntity), &entity_path);
 	if (rv != SA_OK) {
-		err("concat of entity path failed");
+		err("Concat of entity path failed for the appliance");
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
-        switch(response->applianceStatus){
-                case OK:
-                        rpt.ResourceSeverity = SAHPI_OK;
-                        rpt.ResourceFailed = SAHPI_FALSE;
-                        break;
-                case Disabled:
-                        rpt.ResourceSeverity = SAHPI_CRITICAL;
-                        rpt.ResourceFailed = SAHPI_TRUE;
-                        break;
-                case Warning:
-                        rpt.ResourceSeverity = SAHPI_MINOR;
-                        rpt.ResourceFailed = SAHPI_FALSE;
-                        break;
-                case Critical:
-                        rpt.ResourceSeverity = SAHPI_CRITICAL;
-                        rpt.ResourceFailed = SAHPI_FALSE;
-                        break;
-                default:
-                        rpt.ResourceSeverity = SAHPI_MAJOR;
-                        rpt.ResourceFailed = SAHPI_TRUE;
-        }
+	switch(response->applianceStatus){
+		case OK:
+			rpt.ResourceSeverity = SAHPI_OK;
+			rpt.ResourceFailed = SAHPI_FALSE;
+			break;
+		case Disabled:
+			rpt.ResourceSeverity = SAHPI_CRITICAL;
+			rpt.ResourceFailed = SAHPI_TRUE;
+			break;
+		case Warning:
+			rpt.ResourceSeverity = SAHPI_MINOR;
+			rpt.ResourceFailed = SAHPI_FALSE;
+			break;
+		case Critical:
+			rpt.ResourceSeverity = SAHPI_CRITICAL;
+			rpt.ResourceFailed = SAHPI_FALSE;
+			break;
+		default:
+			rpt.ResourceSeverity = SAHPI_MAJOR;
+			rpt.ResourceFailed = SAHPI_TRUE;
+	}
 	rpt.ResourceInfo.ManufacturerId = HPE_MANUFACTURING_ID;
-	rpt.HotSwapCapabilities = 0x0;
+	rpt.ResourceTag.DataType = SAHPI_TL_TYPE_TEXT;
+	rpt.ResourceTag.Language = SAHPI_LANG_ENGLISH;
+	ov_rest_trim_whitespace(response->name);
+	rpt.ResourceTag.DataLength = strlen("ACTIVE_COMPOSER");
+	memset(rpt.ResourceTag.Data, 0, SAHPI_MAX_TEXT_BUFFER_LENGTH);
+	snprintf((char *) (rpt.ResourceTag.Data),
+			rpt.ResourceTag.DataLength+1, "%s", "ACTIVE_COMPOSER");
+	rpt.ResourceId = oh_uid_from_entity_path(&(rpt.ResourceEntity));
+	/* set default hotswap capability */
+	if (rpt.ResourceCapabilities & SAHPI_CAPABILITY_MANAGED_HOTSWAP) {
+		rpt.HotSwapCapabilities =
+			SAHPI_HS_CAPABILITY_AUTOEXTRACT_READ_ONLY;
+	} else {
+		rpt.HotSwapCapabilities = 0;
+	}
+	if (rpt.ResourceCapabilities & SAHPI_CAPABILITY_MANAGED_HOTSWAP) {
+		switch (appliancebay_info.powerState){
+			case Off:
+				state = SAHPI_POWER_OFF;
+				break;
+			case On:
+				state = SAHPI_POWER_ON;
+				break;
+			case PoweringOff:
+				state = SAHPI_POWER_OFF;
+				break;
+			case PoweringOn:
+				state = SAHPI_POWER_ON;
+				break;
+			case Restting:
+				err("Wrong Power State (REBOOT) detected"
+						" for appliance in bay %d",
+						appliancebay_info.bayNumber);
+				return SA_ERR_HPI_INTERNAL_ERROR;
+			default:
+				err("Unknown Power State %d detected"
+						" for the server in bay %d",
+						appliancebay_info.powerState,
+						appliancebay_info.bayNumber);
+				return SA_ERR_HPI_INTERNAL_ERROR;
+		}
+	}
+	if(appliancebay_info.poweredOn){
+		state = SAHPI_POWER_ON;
+	}
+	hotswap_state = (struct ovRestHotswapState *)
+		g_malloc0(sizeof(struct ovRestHotswapState));
+	if(hotswap_state == NULL){
+		err("Out of memory");
+		return SA_ERR_HPI_OUT_OF_MEMORY;
+	}
+	switch (state) {
+		case SAHPI_POWER_ON:
+		case SAHPI_POWER_CYCLE:
+			hotswap_state->currentHsState =
+				SAHPI_HS_STATE_ACTIVE;
+			break;
+		case SAHPI_POWER_OFF:
+			hotswap_state->currentHsState =
+				SAHPI_HS_STATE_INACTIVE;
+			break;
+		default:
+			err("Unknown power status %d for server"
+					" in bay %d", state, 
+					appliancebay_info.bayNumber);
+			wrap_g_free(hotswap_state);
+			return SA_ERR_HPI_INTERNAL_ERROR;
+	}
+	/* Add the Appliance rpt to the plugin RPTable */
+	rv = oh_add_resource(oh_handler->rptcache, &rpt, hotswap_state , 0);
+	if (rv != SA_OK) {
+		err("Failed to Add Appliance Resource");
+		wrap_g_free(hotswap_state);
+		return rv;
+	}
+	*resource_id = rpt.ResourceId;
+	return SA_OK;
+}
+
+/**
+ * ov_rest_build_composer_rpt:
+ *      @oh_handler:  Pointer to openhpi handler.
+ *      @name:        Pointer to the name of the appliance.
+ *      @resource_id: Pointer to the resource id.
+ *      @type:  Active / Standby.
+ *
+ * Purpose:
+ *      Builds the appliance RPT entry.
+ *     All non-active appliances are added under root
+ *      Pushes the RPT entry to plugin RPTable.
+ *
+ * Detailed Description: NA
+ *
+ * Return values:
+ *      SA_OK                     - on success.
+ *      SA_ERR_HPI_INVALID_PARAMS - on wrong parameters
+ *      SA_ERR_HPI_INTERNAL_ERROR - on failure.
+ **/
+SaErrorT ov_rest_build_composer_rpt(struct oh_handler_state *oh_handler,
+                             struct applianceHaNodeInfo *response,
+                             SaHpiResourceIdT *resource_id, char *type)
+{
+	SaErrorT rv = SA_OK;
+	SaHpiEntityPathT entity_path = {{{0}}};
+	struct ov_rest_handler *ov_handler = NULL;
+	char *entity_root = NULL, *enclosure_doc = NULL;
+	SaHpiRptEntryT rpt = {0}, *enc_rpt = NULL;
+	struct enclosureStatus *enclosure = NULL;
+	struct ovRestHotswapState * hotswap_state = NULL;
+	SaHpiPowerStateT state = {0};
+	struct applianceInfo appliancebay_info = {{0}};
+	struct enclosureInfoArrayResponse enc_response = {0};
+	json_object* jvalue_comp_array = NULL, *jvalue_composer = NULL;
+
+	if (oh_handler == NULL || response == NULL) {
+		err("Invalid parameters");
+		return SA_ERR_HPI_INVALID_PARAMS;
+	}
+	ov_handler = (struct ov_rest_handler *) oh_handler->data;
+	if(ov_handler == NULL) {
+		err("Invalid parameters");
+		return SA_ERR_HPI_INVALID_PARAMS;
+	}
+	WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
+			ov_handler->connection->hostname,
+			response->enclosure_uri);
+	rv = ov_rest_getenclosureInfoArray(oh_handler, &enc_response,
+			ov_handler->connection, enclosure_doc);
+	if(rv != SA_OK || enc_response.enclosure_array == NULL) {
+		CRIT("No response from ov_rest_getenclosureInfoArray");
+		return rv;
+	}
+	jvalue_comp_array = ov_rest_wrap_json_object_object_get(
+			enc_response.enclosure_array,
+			"applianceBays");
+	jvalue_composer =
+		json_object_array_get_idx(jvalue_comp_array,
+				response->bayNumber-1);
+	if (!jvalue_composer) {
+		CRIT("Invalid response for the composer"
+				" in bay %d", response->bayNumber);
+		ov_rest_wrap_json_object_put(enc_response.root_jobj);
+		return SA_ERR_HPI_INTERNAL_ERROR;
+	}
+	ov_rest_json_parse_applianceInfo(jvalue_composer,
+			&appliancebay_info);
+	ov_rest_wrap_json_object_put(enc_response.root_jobj);
+	/* Fetch and encode the entity path required for the rpt field */
+	entity_root = (char *) g_hash_table_lookup(oh_handler->config,
+			"entity_root");
+	memset(&entity_path, 0, sizeof(SaHpiEntityPathT));
+	rv = oh_encode_entitypath(entity_root, &entity_path);
+	if (rv != SA_OK) {
+		err("Encoding entity path failed for the appliance");
+		return SA_ERR_HPI_INTERNAL_ERROR;
+	}
+	/* Populate the rpt with the details of the appliance */
+	memset(&rpt, 0, sizeof(SaHpiRptEntryT));
+	rpt.ResourceCapabilities = SAHPI_CAPABILITY_RDR |
+		SAHPI_CAPABILITY_RESOURCE |
+		SAHPI_CAPABILITY_SENSOR |
+		SAHPI_CAPABILITY_INVENTORY_DATA |
+		SAHPI_CAPABILITY_CONTROL ;
+	rpt.ResourceEntity.Entry[2].EntityType = SAHPI_ENT_ROOT;
+	rpt.ResourceEntity.Entry[2].EntityLocation = 0;
+	rpt.ResourceEntity.Entry[1].EntityType =
+		SAHPI_ENT_SYSTEM_CHASSIS;
+	enclosure = ov_handler->ov_rest_resources.enclosure;
+	while(enclosure){
+		if(strstr(response->enclosure_uri, enclosure->serialNumber)){
+			break;
+		}
+		enclosure = enclosure->next;
+	}
+	if(enclosure){
+		enc_rpt = oh_get_resource_by_id(oh_handler->rptcache,
+				enclosure->enclosure_rid);
+	}else{
+		err("Could not find the associated enclosure"
+				" for the composer in bay %d, parent location uri"
+				" %s",response->bayNumber, response->enclosure_uri);
+		return SA_ERR_HPI_INTERNAL_ERROR;
+	}
+	rpt.ResourceEntity.Entry[1].EntityLocation =
+		enc_rpt->ResourceEntity.Entry[0].EntityLocation;
+	rpt.ResourceEntity.Entry[0].EntityType =
+		SAHPI_ENT_SYS_MGMNT_MODULE;
+	rpt.ResourceEntity.Entry[0].EntityLocation =
+		response->bayNumber;
+	rv = oh_concat_ep(&(rpt.ResourceEntity), &entity_path);
+	if (rv != SA_OK) {
+		err("Concat of entity path failed for the appliance");
+		return SA_ERR_HPI_INTERNAL_ERROR;
+	}
+	switch(response->applianceStatus){
+		case OK:
+			rpt.ResourceSeverity = SAHPI_OK;
+			rpt.ResourceFailed = SAHPI_FALSE;
+			break;
+		case Disabled:
+			rpt.ResourceSeverity = SAHPI_CRITICAL;
+			rpt.ResourceFailed = SAHPI_TRUE;
+			break;
+		case Warning:
+			rpt.ResourceSeverity = SAHPI_MINOR;
+			rpt.ResourceFailed = SAHPI_FALSE;
+			break;
+		case Critical:
+			rpt.ResourceSeverity = SAHPI_CRITICAL;
+			rpt.ResourceFailed = SAHPI_FALSE;
+			break;
+		default:
+			rpt.ResourceSeverity = SAHPI_MAJOR;
+			rpt.ResourceFailed = SAHPI_TRUE;
+	}
+	rpt.ResourceInfo.ManufacturerId = HPE_MANUFACTURING_ID;
 	rpt.ResourceTag.DataType = SAHPI_TL_TYPE_TEXT;
 	rpt.ResourceTag.Language = SAHPI_LANG_ENGLISH;
 	ov_rest_trim_whitespace(response->name);
@@ -2132,16 +2588,77 @@ SaErrorT ov_rest_build_appliance_rpt(struct oh_handler_state *oh_handler,
 	snprintf((char *) (rpt.ResourceTag.Data),
 			strlen(response->name) + 1, "%s", response->name);
 	rpt.ResourceId = oh_uid_from_entity_path(&(rpt.ResourceEntity));
-
+	/* set default hotswap capability */
+	if (rpt.ResourceCapabilities & SAHPI_CAPABILITY_MANAGED_HOTSWAP) {
+		rpt.HotSwapCapabilities =
+			SAHPI_HS_CAPABILITY_AUTOEXTRACT_READ_ONLY;
+	} else {
+		rpt.HotSwapCapabilities = 0;
+	}
+	if (rpt.ResourceCapabilities & SAHPI_CAPABILITY_MANAGED_HOTSWAP) {
+		switch (appliancebay_info.powerState){
+			case Off:
+				state = SAHPI_POWER_OFF;
+				break;
+			case On:
+				state = SAHPI_POWER_ON;
+				break;
+			case PoweringOff:
+				state = SAHPI_POWER_OFF;
+				break;
+			case PoweringOn:
+				state = SAHPI_POWER_ON;
+				break;
+			case Restting:
+				err("Wrong Power State (REBOOT) detected"
+						" for appliance in bay %d",
+						appliancebay_info.bayNumber);
+				return SA_ERR_HPI_INTERNAL_ERROR;
+			default:
+				err("Unknown Power State %d detected"
+						" for the server in bay %d",
+						appliancebay_info.powerState,
+						appliancebay_info.bayNumber);
+				return SA_ERR_HPI_INTERNAL_ERROR;
+		}
+	}
+	if(appliancebay_info.poweredOn){
+		state = SAHPI_POWER_ON;
+	}
+	hotswap_state = (struct ovRestHotswapState *)
+		g_malloc0(sizeof(struct ovRestHotswapState));
+	if(hotswap_state == NULL){
+		err("Out of memory");
+		return SA_ERR_HPI_OUT_OF_MEMORY;
+	}
+	switch (state) {
+		case SAHPI_POWER_ON:
+		case SAHPI_POWER_CYCLE:
+			hotswap_state->currentHsState =
+				SAHPI_HS_STATE_ACTIVE;
+			break;
+		case SAHPI_POWER_OFF:
+			hotswap_state->currentHsState =
+				SAHPI_HS_STATE_INACTIVE;
+			break;
+		default:
+			err("Unknown power status %d for server"
+					" in bay %d", state,
+					appliancebay_info.bayNumber);
+			wrap_g_free(hotswap_state);
+			return SA_ERR_HPI_INTERNAL_ERROR;
+	}
 	/* Add the Appliance rpt to the plugin RPTable */
-	rv = oh_add_resource(oh_handler->rptcache, &rpt, NULL, 0);
+	rv = oh_add_resource(oh_handler->rptcache, &rpt, hotswap_state , 0);
 	if (rv != SA_OK) {
 		err("Failed to Add Appliance Resource");
+		wrap_g_free(hotswap_state);
 		return rv;
 	}
 	*resource_id = rpt.ResourceId;
 	return SA_OK;
 }
+
 
 
 /**
@@ -2167,8 +2684,8 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 	
 	struct ov_rest_handler *ov_handler = NULL;
 	SaHpiInt32T i = 0;;
-	struct enclosure_status *temp_enclosure = NULL;
-	struct enclosure_status *enclosure = NULL, *temp = NULL;
+	struct enclosureStatus *temp_enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL, *temp = NULL;
 
 	if (oh_handler == NULL) {
 		err("Invalid parameters");
@@ -2181,8 +2698,8 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 		return SA_ERR_HPI_INVALID_PARAMS;
 	}
 	enclosure = ov_handler->ov_rest_resources.enclosure;
-	temp_enclosure = (struct enclosure_status* )
-				g_malloc0(sizeof(struct enclosure_status ));
+	temp_enclosure = (struct enclosureStatus* )
+				g_malloc0(sizeof(struct enclosureStatus ));
 
 	temp_enclosure->enclosure_rid =
 		SAHPI_UNSPECIFIED_RESOURCE_ID;
@@ -2191,33 +2708,89 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 	temp_enclosure->thermal_subsystem_rid =
 		SAHPI_UNSPECIFIED_RESOURCE_ID;
 	temp_enclosure->lcd_rid = SAHPI_UNSPECIFIED_RESOURCE_ID;
-	temp_enclosure->serial_number = (char *) g_malloc0(sizeof(char *) *
+	temp_enclosure->serialNumber = (char *) g_malloc0(sizeof(char *) *
                                         MAX_256_CHARS);
-	if (temp_enclosure->serial_number == NULL) {
+	if (temp_enclosure->serialNumber == NULL) {
 		err("Out of memory");
 		wrap_g_free(temp_enclosure);
 		return SA_ERR_HPI_OUT_OF_MEMORY;
 	}
-	strcpy(temp_enclosure->serial_number, info->serialNumber);
+	strcpy(temp_enclosure->serialNumber, info->serialNumber);
 	
 
 	/* Create the resource presence matrix for
-         * server, interconnect,power supply and fan unit.
+         * Composer, server, interconnect,power supply and fan unit.
          * We need the resource presence matrix for re-discovery to sync
          * with current states of the resources
          */
+
+	/* Build resource presence matrix for Composers */
+	temp_enclosure->composer.max_bays = info->composerBays;
+	if(temp_enclosure->composer.max_bays){
+		temp_enclosure->composer.presence = 
+			(enum resource_presence *)
+			g_malloc0((sizeof(enum resource_presence)) *
+					temp_enclosure->composer.max_bays);
+		if(temp_enclosure->composer.presence == NULL){
+			err("Out of memory");
+			wrap_g_free(temp_enclosure->serialNumber);
+			wrap_g_free(temp_enclosure);
+			return SA_ERR_HPI_OUT_OF_MEMORY;
+		}
+		/* allocate memory for resource_id matrix for composers */
+		 temp_enclosure->composer.resource_id = 
+			(SaHpiResourceIdT *) g_malloc0((
+				sizeof(SaHpiResourceIdT ) *
+				temp_enclosure->composer.max_bays));
+		if (temp_enclosure->composer.resource_id == NULL) {
+			err("Out of memory");
+			release_ov_rest_resources(temp_enclosure);
+			return SA_ERR_HPI_OUT_OF_MEMORY;
+		}
+		temp_enclosure->composer.type = 
+			(enum resourceCategory *)
+			g_malloc0((sizeof(enum resourceCategory)) *
+					temp_enclosure->composer.max_bays);
+		if(temp_enclosure->composer.type == NULL){
+			
+			err("Out of memory");
+			release_ov_rest_resources(temp_enclosure);
+			return SA_ERR_HPI_OUT_OF_MEMORY;
+		}
+
+		temp_enclosure->composer.serialNumber = (char **)
+			g_malloc0(sizeof(char **) *
+					temp_enclosure->composer.max_bays);
+		if(temp_enclosure->composer.serialNumber == NULL){
+			err("Out of memory");
+			release_ov_rest_resources(temp_enclosure);
+			return SA_ERR_HPI_OUT_OF_MEMORY;
+		}
+		for(i = 0; i < temp_enclosure->composer.max_bays; i++){
+			temp_enclosure->composer.presence[i] = RES_ABSENT;
+			temp_enclosure->composer.resource_id[i] =
+				SAHPI_UNSPECIFIED_RESOURCE_ID;
+			temp_enclosure->composer.serialNumber[i] = (char *)
+				g_malloc0(sizeof(char) * MAX_256_CHARS);
+			if (temp_enclosure->composer.serialNumber[i] ==
+					NULL) {
+				err("Out of memory");
+				release_ov_rest_resources(temp_enclosure);
+				return SA_ERR_HPI_OUT_OF_MEMORY;
+			}
+		}
+	}	
 
 	/* Build resource presence matrix for servers */
 	temp_enclosure->server.max_bays = info->bladeBays;
 	if(temp_enclosure->server.max_bays){
 		temp_enclosure->server.presence =
-			(enum resource_presence_status *)
-			g_malloc0((sizeof(enum resource_presence_status)) *
+			(enum resource_presence *)
+			g_malloc0((sizeof(enum resource_presence)) *
 					temp_enclosure->server.max_bays);
 		if (temp_enclosure->server.presence == NULL) {
 			err("Out of memory");	
-			wrap_g_free(temp_enclosure->serial_number);
-			wrap_g_free(temp_enclosure);
+			release_ov_rest_resources(temp_enclosure);
 			return SA_ERR_HPI_OUT_OF_MEMORY;
 		}
 		/* allocate memory for resource_id matrix server blades */
@@ -2232,8 +2805,8 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 		}
 
 		temp_enclosure->server.type =
-			(enum resource_category *)
-			g_malloc0((sizeof(enum resource_category)) *
+			(enum resourceCategory *)
+			g_malloc0((sizeof(enum resourceCategory)) *
 					temp_enclosure->server.max_bays);
 		if (temp_enclosure->server.type == NULL) {
 			err("Out of memory");	
@@ -2245,10 +2818,10 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 		 * is not reachable, we can detect this change by comparing 
 		 * the serial numbers of the old and new blade.
 		 */
-		temp_enclosure->server.serial_number = (char **)
+		temp_enclosure->server.serialNumber = (char **)
 			g_malloc0(sizeof(char **) *
 					temp_enclosure->server.max_bays);
-		if (temp_enclosure->server.serial_number == NULL) {
+		if (temp_enclosure->server.serialNumber == NULL) {
 			err("Out of memory");
 			release_ov_rest_resources(temp_enclosure);
 			return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2258,9 +2831,9 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 			temp_enclosure->server.presence[i] = RES_ABSENT;
 			temp_enclosure->server.resource_id[i] =
 				SAHPI_UNSPECIFIED_RESOURCE_ID;
-			temp_enclosure->server.serial_number[i] = (char *)
+			temp_enclosure->server.serialNumber[i] = (char *)
 				g_malloc0(sizeof(char *) * MAX_256_CHARS);
-			if (temp_enclosure->server.serial_number[i] ==
+			if (temp_enclosure->server.serialNumber[i] ==
 					NULL) {
 				err("Out of memory");
 				release_ov_rest_resources(temp_enclosure);
@@ -2275,8 +2848,8 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 	if(temp_enclosure->interconnect.max_bays){
 
 		temp_enclosure->interconnect.presence =
-			(enum resource_presence_status *)
-			g_malloc0((sizeof(enum resource_presence_status)) *
+			(enum resource_presence *)
+			g_malloc0((sizeof(enum resource_presence)) *
 					temp_enclosure->interconnect.max_bays);
 		if (temp_enclosure->interconnect.presence == NULL) {
 			err("Out of memory");
@@ -2295,8 +2868,8 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 		}
 
 		temp_enclosure->interconnect.type =
-			(enum resource_category *)
-			g_malloc0((sizeof(enum resource_category)) *
+			(enum resourceCategory *)
+			g_malloc0((sizeof(enum resourceCategory)) *
 					temp_enclosure->interconnect.max_bays);
 		if (temp_enclosure->interconnect.type == NULL) {
 			err("Out of memory");	
@@ -2304,10 +2877,10 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 			return SA_ERR_HPI_OUT_OF_MEMORY;
 		}
 
-		temp_enclosure->interconnect.serial_number = (char **)
+		temp_enclosure->interconnect.serialNumber = (char **)
 			g_malloc0(sizeof(char **) *
 					temp_enclosure->interconnect.max_bays);
-		if (temp_enclosure->interconnect.serial_number == NULL) {
+		if (temp_enclosure->interconnect.serialNumber == NULL) {
 			err("Out of memory");
 			release_ov_rest_resources(temp_enclosure);
 			return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2320,10 +2893,10 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 			temp_enclosure->interconnect.resource_id[i] =
 				SAHPI_UNSPECIFIED_RESOURCE_ID;
 
-			temp_enclosure->interconnect.serial_number[i] =
+			temp_enclosure->interconnect.serialNumber[i] =
 				(char *) g_malloc0(sizeof(char *) *
 						MAX_256_CHARS);
-			if (temp_enclosure->interconnect.serial_number[i]
+			if (temp_enclosure->interconnect.serialNumber[i]
 					== NULL) {
 				err("Out of memory");
 				release_ov_rest_resources(temp_enclosure);
@@ -2337,8 +2910,8 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 	if(temp_enclosure->fan.max_bays){
 
 		temp_enclosure->fan.presence =
-			(enum resource_presence_status *)
-			g_malloc0((sizeof(enum resource_presence_status)) *
+			(enum resource_presence *)
+			g_malloc0((sizeof(enum resource_presence)) *
 					temp_enclosure->fan.max_bays);
 		if (temp_enclosure->fan.presence == NULL) {
 			err("Out of memory");
@@ -2357,8 +2930,8 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 		}
 
 		temp_enclosure->fan.type =
-			(enum resource_category *)
-			g_malloc0((sizeof(enum resource_category)) *
+			(enum resourceCategory *)
+			g_malloc0((sizeof(enum resourceCategory)) *
 					temp_enclosure->fan.max_bays);
 		if (temp_enclosure->fan.type == NULL) {
 			err("Out of memory");	
@@ -2366,10 +2939,10 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 			return SA_ERR_HPI_OUT_OF_MEMORY;
 		}
 
-                temp_enclosure->fan.serial_number = (char **)
+                temp_enclosure->fan.serialNumber = (char **)
                         g_malloc0(sizeof(char **) *
                                         temp_enclosure->fan.max_bays);
-                if (temp_enclosure->fan.serial_number == NULL) {
+                if (temp_enclosure->fan.serialNumber == NULL) {
                         err("Out of memory");
                         release_ov_rest_resources(temp_enclosure);
                         return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2383,10 +2956,10 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 			temp_enclosure->fan.resource_id[i] =
 				SAHPI_UNSPECIFIED_RESOURCE_ID;
 
-                        temp_enclosure->fan.serial_number[i] =
+                        temp_enclosure->fan.serialNumber[i] =
                                 (char *) g_malloc0(sizeof(char *) *
                                                 MAX_256_CHARS);
-                        if (temp_enclosure->fan.serial_number[i] ==
+                        if (temp_enclosure->fan.serialNumber[i] ==
                                         NULL) {
                                 err("Out of memory");
                                 release_ov_rest_resources(temp_enclosure);
@@ -2399,8 +2972,8 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 	temp_enclosure->ps_unit.max_bays = info->powerSupplyBayCount;
 	if(temp_enclosure->ps_unit.max_bays){
 		temp_enclosure->ps_unit.presence =
-			(enum resource_presence_status *)
-			g_malloc0((sizeof(enum resource_presence_status)) *
+			(enum resource_presence *)
+			g_malloc0((sizeof(enum resource_presence)) *
 					temp_enclosure->ps_unit.max_bays);
 		if (temp_enclosure->ps_unit.presence == NULL) {
 			err("Out of memory");
@@ -2418,18 +2991,18 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 			return SA_ERR_HPI_OUT_OF_MEMORY;
 		}
 		temp_enclosure->ps_unit.type =
-			(enum resource_category *)
-			g_malloc0((sizeof(enum resource_category)) *
+			(enum resourceCategory *)
+			g_malloc0((sizeof(enum resourceCategory)) *
 					temp_enclosure->ps_unit.max_bays);
 		if (temp_enclosure->ps_unit.type == NULL) {
 			err("Out of memory");	
 			release_ov_rest_resources(temp_enclosure);
 			return SA_ERR_HPI_OUT_OF_MEMORY;
 		}
-		temp_enclosure->ps_unit.serial_number = (char **)
+		temp_enclosure->ps_unit.serialNumber = (char **)
 			g_malloc0(sizeof(char **) *
 					temp_enclosure->ps_unit.max_bays);
-		if (temp_enclosure->ps_unit.serial_number == NULL) {
+		if (temp_enclosure->ps_unit.serialNumber == NULL) {
 			err("Out of memory");
 			release_ov_rest_resources(temp_enclosure);
 			return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2440,10 +3013,10 @@ SaErrorT ov_rest_build_enc_info(struct oh_handler_state *oh_handler,
 			temp_enclosure->ps_unit.resource_id[i] =
 				SAHPI_UNSPECIFIED_RESOURCE_ID;
 
-			temp_enclosure->ps_unit.serial_number[i] =
+			temp_enclosure->ps_unit.serialNumber[i] =
 				(char *) g_malloc0(sizeof(char *) *
 						MAX_256_CHARS);
-			if (temp_enclosure->ps_unit.serial_number[i] ==
+			if (temp_enclosure->ps_unit.serialNumber[i] ==
 					NULL) {
 				err("Out of memory");
 				release_ov_rest_resources(temp_enclosure);
@@ -2519,7 +3092,8 @@ SaErrorT ov_rest_build_enclosure_rpt(struct oh_handler_state *oh_handler,
         memset(&entity_path, 0, sizeof(SaHpiEntityPathT));
         rv = oh_encode_entitypath(entity_root, &entity_path);
         if (rv != SA_OK) {
-                err("Encoding entity path failed");
+                err("Encoding entity path failed for the enclosure"
+			" with serial number %s", response->serialNumber);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
         /* Populate the rpt with the details of the enclosure */
@@ -2538,7 +3112,8 @@ SaErrorT ov_rest_build_enclosure_rpt(struct oh_handler_state *oh_handler,
 	
         rv = oh_concat_ep(&(rpt.ResourceEntity), &entity_path);
         if (rv != SA_OK) {
-                err("concat of entity path failed");
+                err("Concat of entity path failed for the enclosure"
+			" with serial number %s", response->serialNumber); 
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
         switch(response->enclosureStatus){
@@ -2576,7 +3151,8 @@ SaErrorT ov_rest_build_enclosure_rpt(struct oh_handler_state *oh_handler,
         /* Add the enclosure rpt to the plugin RPTable */
         rv = oh_add_resource(oh_handler->rptcache, &rpt, NULL, 0);
         if (rv != SA_OK) {
-                err("Failed to Add Enclosure Resource");
+                err("Failed to Add Enclosure with serial number %s",
+						response->serialNumber);
                 return rv;
         }
         *resource_id = rpt.ResourceId;
@@ -2624,13 +3200,15 @@ SaErrorT ov_rest_build_enclosure_rdr(struct oh_handler_state *oh_handler,
         rv = ov_rest_build_enclosure_inv_rdr(oh_handler, response, &rdr, 
 						&inventory);
         if (rv != SA_OK) {
-                err("Failed to Add enclosure inventory RDR");
+                err("Failed to Add enclosure inventory RDR for resource"
+				" id %d", resource_id);
                 return rv;
         }
 
         rv = oh_add_rdr(oh_handler->rptcache, resource_id, &rdr, inventory, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add rdr for enclosure resource id %d",
+							resource_id);
                 return rv;
         }
 
@@ -2681,13 +3259,13 @@ SaErrorT ov_rest_discover_enclosure(struct oh_handler_state *handler)
 	struct enclosureInfo result = {{0}};
         SaHpiResourceIdT resource_id;
 	char* enclosure_doc = NULL, *s = NULL;
-	int i = 0,arraylen = 0;
-	struct enclosure_status *enclosure = NULL, *temp = NULL;
-	json_object * jvalue = NULL;
+	int i = 0, j = 0, arraylen = 0;
+	struct enclosureStatus *enclosure = NULL, *temp = NULL;
+	json_object *jvalue = NULL, *jvalue_enc = NULL, *jvalue_enc_array=NULL;
 
 	ov_handler = (struct ov_rest_handler *) handler->data;
 
-	asprintf(&ov_handler->connection->url, OV_ENCLOSURE_URI, 
+	WRAP_ASPRINTF(&ov_handler->connection->url, OV_ENCLOSURE_URI, 
 			ov_handler->connection->hostname);
 	rv = ov_rest_getenclosureInfoArray(handler, &response, 
 			ov_handler->connection, enclosure_doc);
@@ -2706,35 +3284,58 @@ SaErrorT ov_rest_discover_enclosure(struct oh_handler_state *handler)
 	for (i=0; i< arraylen; i++){
 		jvalue = json_object_array_get_idx(response.enclosure_array,i);
 		if (!jvalue){
-			CRIT("Invalid response for the enclosure in bay %d",
+			CRIT("Invalid response for the enclosure %d",
 				i + 1);
 			continue;
 		}
 		ov_rest_json_parse_enclosure(jvalue,&result);
+		jvalue_enc_array = ov_rest_wrap_json_object_object_get(jvalue,
+		                        "managerBays");
+		/* Checking for json object type, if it is not array, return */
+		if (json_object_get_type(jvalue_enc_array) != json_type_array) {
+		        CRIT("Not adding managerBay supplied to enclosure %d,"
+		                " no array returned for that",i);
+			continue;
+		}
+
+		for(j = 0; j < arraylen; j++){
+		        jvalue_enc = json_object_array_get_idx(jvalue_enc_array,
+		                        j);
+		        if (!jvalue_enc) {
+		                CRIT("Invalid response for the enclosure"
+		                        " %d", i + 1);
+		                continue;
+		        }
+		        ov_rest_json_parse_enc_manager_bays(jvalue_enc, &result);
+			if(result.presence == Absent)
+		                continue;
+		}
 		enclosure = ov_handler->ov_rest_resources.enclosure;
 		temp = enclosure;
 		while(temp){
-			if(strstr(result.serialNumber, temp->serial_number)){
+			if(strstr(result.serialNumber, temp->serialNumber)){
 				break;		
 			}
 			temp = temp->next;
 		}
 		if(temp){
-			if(strstr(result.serialNumber, temp->serial_number)){
+			if(strstr(result.serialNumber, temp->serialNumber)){
 				continue;
 			}
 		}
 		
 		rv = ov_rest_build_enc_info(handler, &result);
 		if (rv != SA_OK) {
-			err("build enclosure info failed");
+			err("Build enclosure info failed for the enclosure "
+				"with serial number %s", result.serialNumber);
 			ov_rest_wrap_json_object_put(response.root_jobj);
 			return rv;
 		}
 		rv = ov_rest_build_enclosure_rpt(handler, &result, 
 			&resource_id);
 		if (rv != SA_OK) {
-			err("build enclosure rpt failed");
+			err("Build enclosure rpt failed for the enclosure "
+				"with serial number %s", result.serialNumber);
 			ov_rest_wrap_json_object_put(response.root_jobj);
 			return rv;
 		}
@@ -2754,18 +3355,483 @@ SaErrorT ov_rest_discover_enclosure(struct oh_handler_state *handler)
 		}
 		/* Save enclosure resource id */
 		temp->enclosure_rid = resource_id;
-		strcpy(temp->serial_number, result.serialNumber);
+		strcpy(temp->serialNumber, result.serialNumber);
 
 		rv = ov_rest_build_enclosure_rdr(handler,
 				&result, resource_id);
 		if (rv != SA_OK) {
-			err("build enclosure rdr failed");
+			err("Build enclosure rdr failed for the enclosure "
+				"with serial number %s", result.serialNumber);
 			ov_rest_wrap_json_object_put(response.root_jobj);
 			return rv;
 		}
 
 	}
 	ov_rest_wrap_json_object_put(response.root_jobj);
+	return SA_OK;
+}
+
+/**
+ * ov_rest_build_composer_inv_rdr:
+ *      @oh_handler: Handler data pointer.
+ *      @response: Pointer to appliance Info structure.
+ *	@ha_response: Pointer to struct applianceHaNodeInfo structure
+ *      @rdr: Rdr Structure for inventory data.
+ *      @inventory: Rdr private data structure.
+ *
+ * Purpose:
+ *      Creates an inventory rdr for composer.
+ *
+ * Detailed Description:
+ *      - Populates the composer inventory rdr with default values.
+ *      - Inventory data repository is created and associated in the private
+ *        data area of the Inventory RDR.
+ *
+ * Return values:
+ *      SA_OK                     - On Success.
+ *      SA_ERR_HPI_INVALID_PARAMS - On wrong parameters.
+ *      SA_ERR_HPI_INTERNAL_ERROR - ov_rest plugin has encountered an internal
+ *                                  error.
+ *      SA_ERR_HPI_OUT_OF_MEMORY  - Request failed due to insufficient memory.
+ **/
+
+SaErrorT ov_rest_build_composer_inv_rdr(struct oh_handler_state *oh_handler,
+				struct applianceInfo *response,
+				struct applianceHaNodeInfo *ha_response,
+				SaHpiResourceIdT resource_id,
+				SaHpiRdrT *rdr,
+				struct ov_rest_inventory **inventory)
+{
+
+        SaErrorT rv = SA_OK;
+        SaHpiIdrFieldT hpi_field = {0};
+        char appliance_inv_str[] = APPLIANCE_INVENTORY_STRING, *tmp = NULL;
+        struct ov_rest_inventory *local_inventory = NULL;
+        struct ovRestArea *head_area = NULL;
+        SaHpiInt32T add_success_flag = 0;
+        SaHpiInt32T product_area_success_flag = 0;
+        SaHpiInt32T area_count = 0;
+        SaHpiRptEntryT *rpt = NULL;
+        SaHpiFloat64T fm_version = 0;
+        SaHpiInt32T major = 0;
+
+        if (oh_handler == NULL || response == NULL || rdr == NULL ||
+                        inventory == NULL) {
+                err("Invalid parameter.");
+                return SA_ERR_HPI_INVALID_PARAMS;
+        }
+
+        /* Get the rpt entry of the resource */
+        rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
+        if (rpt == NULL) {
+                err("resource RPT is NULL");
+                return SA_ERR_HPI_INTERNAL_ERROR;
+        }
+
+        /* Populating inventory rdr with default values and resource name */
+        rdr->Entity = rpt->ResourceEntity;
+        rdr->RecordId = 0;
+        rdr->RdrType  = SAHPI_INVENTORY_RDR;
+        rdr->RdrTypeUnion.InventoryRec.IdrId = SAHPI_DEFAULT_INVENTORY_ID;
+        rdr->IdString.DataType = SAHPI_TL_TYPE_TEXT;
+        rdr->IdString.Language = SAHPI_LANG_ENGLISH;
+        ov_rest_trim_whitespace(ha_response->name);
+        rdr->IdString.DataLength = strlen(ha_response->name);
+        snprintf((char *)rdr->IdString.Data,
+                        strlen(ha_response->name) + 1,
+                        "%s", ha_response->name);
+
+        /* Create inventory IDR and populate the IDR header */
+        local_inventory = (struct ov_rest_inventory*)
+                g_malloc0(sizeof(struct ov_rest_inventory));
+        if (!local_inventory) {
+                err("OV REST out of memory");
+                return SA_ERR_HPI_OUT_OF_MEMORY;
+        }
+        local_inventory->inv_rec.IdrId = rdr->RdrTypeUnion.InventoryRec.IdrId;
+        local_inventory->info.idr_info.IdrId =
+                rdr->RdrTypeUnion.InventoryRec.IdrId;
+        local_inventory->info.idr_info.UpdateCount = 1;
+        local_inventory->info.idr_info.ReadOnly = SAHPI_FALSE;
+        local_inventory->info.idr_info.NumAreas = 0;
+        local_inventory->info.area_list = NULL;
+        local_inventory->comment =
+                (char *)g_malloc0(strlen(appliance_inv_str) + 1);
+        strcpy(local_inventory->comment, appliance_inv_str);
+
+        /* Create and add product area if resource name and/or manufacturer
+         * information exist
+         */
+        rv = ov_rest_add_product_area(&local_inventory->info.area_list,
+                        ha_response->name,
+                        "HPE",
+                        &add_success_flag);
+        if (rv != SA_OK) {
+                err("Add product area failed");
+                return rv;
+        }
+
+        /* add_success_flag will be true if product area is added,
+         * if this is the first successful creation of IDR area, then have
+         * area pointer stored as the head node for area list
+         */
+        if (add_success_flag != SAHPI_FALSE) {
+                product_area_success_flag = SAHPI_TRUE;
+                (local_inventory->info.idr_info.NumAreas)++;
+                if (area_count == 0) {
+                        head_area = local_inventory->info.area_list;
+                }
+                ++area_count;
+        }
+
+        /* Create and add chassis area if resource part number and/or
+         * serial number exist
+         */
+        rv = ov_rest_add_chassis_area(&local_inventory->info.area_list,
+                        NULL,
+                        response->serialNumber,
+                        &add_success_flag);
+        if (rv != SA_OK) {
+                err("Add chassis area failed");
+                return rv;
+        }
+        if (add_success_flag != SAHPI_FALSE) {
+                (local_inventory->info.idr_info.NumAreas)++;
+                if (area_count == 0) {
+                        head_area = local_inventory->info.area_list;
+                }
+                ++area_count;
+        }
+
+        /* Create and add internal area if all/atleast one of required
+         * information of resource for internal is available
+         */
+        local_inventory->info.area_list = head_area;
+        *inventory = local_inventory;
+
+        /* Adding the product version in IDR product area.  It is added at
+         * the end of the field list.
+         */
+        if (product_area_success_flag == SAHPI_TRUE) {
+                /* Add the product version field if the appliance hardware info
+                 * is available
+                 */
+                if (ha_response->version != NULL) {
+                        memset(&hpi_field, 0, sizeof(SaHpiIdrFieldT));
+                        hpi_field.AreaId = local_inventory->info.area_list->
+                                idr_area_head.AreaId;
+                        hpi_field.Type = SAHPI_IDR_FIELDTYPE_PRODUCT_VERSION;
+                        strcpy ((char *)hpi_field.Field.Data,
+                                        ha_response->version);
+
+                        rv = ov_rest_idr_field_add(&(local_inventory
+                                        ->info.area_list->field_list),
+                                        &hpi_field);
+                        if (rv != SA_OK) {
+                                err("Add idr field failed");
+                                return rv;
+                        }
+
+                        /* Increment the field counter */
+                        local_inventory->info.area_list->idr_area_head.
+                                NumFields++;
+
+                        /* Check whether Firmware version is NULL. */
+                        if (!ha_response->version) {
+                                err("Firmware version is not vailable for the"
+                                        "resource %d", resource_id);
+                                return SA_ERR_HPI_INTERNAL_ERROR;
+                        }
+                        /* Store Firmware MajorRev & MinorRev data in rpt */
+                        fm_version = atof(ha_response->version);
+                        rpt->ResourceInfo.FirmwareMajorRev = major =
+                                        (SaHpiUint8T)floor(fm_version);
+                        rpt->ResourceInfo.FirmwareMinorRev = rintf((
+                                        fm_version - major) * 100);
+                }
+                if (ha_response->uri != NULL) {
+                        hpi_field.AreaId = local_inventory->info.area_list->
+                                        idr_area_head.AreaId;
+                        hpi_field.Type = SAHPI_IDR_FIELDTYPE_CUSTOM;
+                        WRAP_ASPRINTF(&tmp,"URI = %s",ha_response->uri);
+                        strcpy ((char *)hpi_field.Field.Data, tmp);
+                        wrap_free(tmp);
+
+                        rv = ov_rest_idr_field_add(&(
+                                local_inventory->info.area_list->field_list),
+                                &hpi_field);
+                        if (rv != SA_OK) {
+                                err("Add idr field failed");
+                                return rv;
+                        }
+
+                        /* Increment the field counter */
+                        local_inventory->info.area_list->idr_area_head.
+                                NumFields++;
+                }
+        }
+        return SA_OK;
+
+}
+
+/**
+ * ov_rest_build_composer_rdr:
+ *      @oh_handler:  Pointer to openhpi handler.
+ *      @composer_info:    Pointer to applianceInfo structure.
+ *      @ha_response: Pointer to appliance ha_node info response structure.
+ *      @resource_id: Resource id
+ *
+ * Purpose:
+ *      Populate the composer RDR.
+ *      Pushes the RDR entry to plugin RPTable
+ *
+ * Detailed Description:
+ *         - Creates the composer RDR
+ *
+ * Return values:
+ *      SA_OK                     - on success.
+ *      SA_ERR_HPI_INVALID_PARAMS - on wrong parameters
+ *      SA_ERR_HPI_INTERNAL_ERROR - on failure.
+ **/
+
+SaErrorT ov_rest_build_composer_rdr( struct oh_handler_state *oh_handler,
+			struct applianceInfo *composer_info,
+			struct applianceHaNodeInfo *ha_response,
+			SaHpiResourceIdT resource_id)
+{	
+        SaErrorT rv = SA_OK;
+        SaHpiRdrT rdr = {0};
+        struct ov_rest_inventory *inventory = NULL;
+        struct ov_rest_sensor_info *sensor_info = NULL;
+        SaHpiInt32T sensor_status = 0;
+        SaHpiInt32T sensor_val = 0;
+
+        if (oh_handler == NULL || composer_info == NULL || ha_response == NULL){
+                err("Invalid parameters");
+                return SA_ERR_HPI_INVALID_PARAMS;
+        }
+
+        /* Build inventory rdr for the appliance */
+        memset(&rdr, 0, sizeof(SaHpiRdrT));
+        rv = ov_rest_build_composer_inv_rdr(oh_handler, composer_info, 
+				ha_response, resource_id, &rdr, &inventory);
+        if (rv != SA_OK) {
+                err("Failed to Add appliance inventory RDR");
+                return rv;
+        }
+
+        rv = oh_add_rdr(oh_handler->rptcache, resource_id, &rdr, inventory, 0);
+        if (rv != SA_OK) {
+                err("Failed to add rdr");
+                return rv;
+        }
+
+        /* Build operational status sensor rdr */
+        switch (ha_response->applianceStatus ) {
+                case OK:
+                        sensor_val = OP_STATUS_OK;
+                        break;
+                case Critical:
+                        sensor_val = OP_STATUS_CRITICAL;
+                        break;
+                case Warning:
+                        sensor_val = OP_STATUS_WARNING;
+                        break;
+                case Disabled:
+                        sensor_val = OP_STATUS_DISABLED;
+                        break;
+                default :
+                        sensor_val = OP_STATUS_UNKNOWN;
+        }
+
+        OV_REST_BUILD_ENABLE_SENSOR_RDR(OV_REST_SEN_OPER_STATUS, sensor_val);
+
+        return SA_OK;
+}
+
+/**
+ * ov_rest_discover_composer:
+ *      @handler: Pointer to openhpi handler.
+ *
+ * Purpose:
+ *      Discovers the composers.
+ *
+ * Detailed Description: NA
+ *
+ * Return values:
+ *      SA_OK    - on success.
+ *      Error    - on failure.
+ **/
+
+SaErrorT ov_rest_discover_composer(struct oh_handler_state *handler)
+{
+
+	SaErrorT rv = 0;
+	SaHpiResourceIdT resource_id;
+	struct enclosureInfoArrayResponse enc_response = {0};
+	struct applianceInfo composer_info = {{0}};
+	struct applianceHaNodeInfo ha_node_result = {{0}};
+	struct applianceHaNodeInfoArrayResponse ha_node_response = {0};
+	struct enclosureInfo enc_result = {{0}};
+	char *enclosure_doc = NULL;
+	/* this Pointer must be freed at the end of this function */
+	int i = 0, j = 0, arraylen = 0, comp_arraylen = 0;
+	json_object *jvalue = NULL, *jvalue_comp_array = NULL;
+	json_object *jvalue_composer = NULL;
+	struct enclosureStatus *enclosure = NULL;
+	struct ov_rest_handler *ov_handler = NULL;
+
+	ov_handler = (struct ov_rest_handler *) handler->data;
+
+	WRAP_ASPRINTF(&ov_handler->connection->url, OV_ENCLOSURE_URI,
+			ov_handler->connection->hostname);
+	rv = ov_rest_getenclosureInfoArray(handler, &enc_response,
+			ov_handler->connection, enclosure_doc);
+	if(rv != SA_OK || enc_response.enclosure_array == NULL) {
+		CRIT("No response from ov_rest_getenclosureInfoArray");
+		return rv;
+	}
+
+	/* Checking for json object type, if it is not array, return */
+	if (json_object_get_type(enc_response.enclosure_array) 
+			!= json_type_array){
+		CRIT("Enclosures may not be added as no array received");
+		ov_rest_wrap_json_object_put(enc_response.root_jobj);
+		return SA_OK;
+	}
+
+	arraylen = json_object_array_length(enc_response.enclosure_array);
+	for (i=0; i< arraylen; i++){
+		memset(&enc_result, 0, sizeof(enc_result));
+		jvalue = json_object_array_get_idx(
+				enc_response.enclosure_array,i);
+		if (!jvalue){
+			CRIT("Invalid response for the enclosure in bay %d",
+					i + 1);
+			continue;
+		}
+		ov_rest_json_parse_enclosure(jvalue,&enc_result);
+		jvalue_comp_array = ov_rest_wrap_json_object_object_get(jvalue,
+				"applianceBays");
+		/* Checking for json object type, if it is not array, return */
+		if (json_object_get_type(jvalue_comp_array) != json_type_array){
+			CRIT("Not adding applianceBay supplied to enclosure %d,"
+					" no array returned for that",i);
+			continue;
+		}
+		comp_arraylen = json_object_array_length(jvalue_comp_array);
+		for(j = 0; j < comp_arraylen; j++){
+			memset(&composer_info, 0, sizeof(composer_info));
+			memset(&ha_node_result, 0, sizeof(ha_node_result));
+			jvalue_composer = 
+				json_object_array_get_idx(jvalue_comp_array, j);
+			if (!jvalue_composer) {
+				CRIT("Invalid response for the composer"
+						" in bay %d", j + 1);
+				continue;
+			}
+			ov_rest_json_parse_applianceInfo(jvalue_composer,
+					&composer_info);
+			/* Check if the composer presence, if Absent ignore it 
+ 			* and go for next composer. 
+ 			* */
+			if(composer_info.presence == Absent){
+				continue;
+			}
+			/* Check if the composer is present but serial number 
+ 			*  is null then ignore and continue.
+ 			* */
+			if(composer_info.serialNumber == '\0'){
+				CRIT("Composer Serial Number is NULL in bay %d"
+					" of Enclosure rerial number %s",
+						j+1, enc_result.serialNumber);
+				continue;
+			}
+			
+			WRAP_ASPRINTF(&ov_handler->connection->url, 
+					OV_APPLIANCE_HA_NODE_ID_URI,
+					ov_handler->connection->hostname, 
+					composer_info.serialNumber);
+		        rv = ov_rest_getapplianceHANodeArray(handler, 
+					 &ha_node_response,
+       				         ov_handler->connection, NULL);
+			if(rv != SA_OK || ha_node_response.haNodeArray 
+				== NULL){
+				CRIT("No response from "
+					"ov_rest_getapplianceHANodeArray");
+				ov_rest_wrap_json_object_put(
+						enc_response.root_jobj);
+				return rv;
+			}
+
+			ov_rest_json_parse_appliance_Ha_node(
+					ha_node_response.haNodeArray,
+					&ha_node_result);
+
+			ov_rest_wrap_json_object_put(
+						ha_node_response.root_jobj);
+
+			/* Build rpt entry for composer */
+			rv = ov_rest_build_composer_rpt(handler,
+					&ha_node_result, &resource_id, 
+					ha_node_result.role);
+			if(rv != SA_OK){
+				err("Failed to Add Composer rpt for bay %d.",
+						composer_info.bayNumber);
+				continue;
+			}
+
+			enclosure = ov_handler->ov_rest_resources.enclosure;
+			while(enclosure != NULL){
+				if(strstr(enclosure->serialNumber,
+						enc_result.serialNumber)){
+					ov_rest_update_resource_status(
+						&enclosure->composer,
+						composer_info.bayNumber,
+						composer_info.serialNumber,
+						resource_id, RES_PRESENT,
+						ha_node_result.type);
+					break;
+				}
+				enclosure = enclosure->next;
+			}
+			if(enclosure == NULL){
+				CRIT("Enclosure data of the Composer"
+					" serial number %s is unavailable",
+					composer_info.serialNumber);
+			}
+			/* Build rdr entry for server */
+			rv = ov_rest_build_composer_rdr(handler, &composer_info,
+					&ha_node_result, resource_id);
+			if(rv != SA_OK){
+				err("build composer rdr failed");
+				rv = ov_rest_free_inventory_info(handler, 
+								resource_id);
+				if (rv != SA_OK) {
+					err("Inventory cleanup failed for the "
+					"composer in bay %d with resource id "
+					"%d", composer_info.bayNumber, 
+					resource_id);
+				}
+
+				oh_remove_resource(handler->rptcache, resource_id);
+				/* reset resource_info structure to default 
+ 				 * values */
+				ov_rest_update_resource_status(
+						&enclosure->composer,
+						composer_info.bayNumber,
+						"",
+						SAHPI_UNSPECIFIED_RESOURCE_ID,
+						RES_ABSENT,
+						UNSPECIFIED_RESOURCE);
+				ov_rest_wrap_json_object_put(
+							enc_response.root_jobj);
+				return SA_ERR_HPI_INTERNAL_ERROR;
+			}
+		}
+	}
+
+	ov_rest_wrap_json_object_put(enc_response.root_jobj);
 	return SA_OK;
 }
 
@@ -2794,7 +3860,7 @@ SaErrorT build_discovered_server_rpt(struct oh_handler_state *oh_handler,
 {
         SaErrorT rv = SA_OK;
 	SaHpiPowerStateT state = {0};
-        struct ov_rest_hotswap_state *hotswap_state = NULL;
+        struct ovRestHotswapState *hotswap_state = NULL;
         SaHpiRptEntryT rpt = {0};
 
         if (oh_handler == NULL || response == NULL ||
@@ -2804,7 +3870,8 @@ SaErrorT build_discovered_server_rpt(struct oh_handler_state *oh_handler,
         }
 
         if(ov_rest_build_server_rpt(oh_handler, response, &rpt) != SA_OK) {
-                err("Building Server Rpt failed during discovery");
+                err("Building Server Rpt failed during discovery"
+			" in bay %d", response->bayNumber);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -2827,16 +3894,21 @@ SaErrorT build_discovered_server_rpt(struct oh_handler_state *oh_handler,
 				state = SAHPI_POWER_ON;
 				break;
 			case Restting:
-                                err("Wrong Power State (REBOOT) detected");
+                                err("Wrong Power State (REBOOT) detected"
+					" for server in bay %d",
+						response->bayNumber);
                                 return SA_ERR_HPI_INTERNAL_ERROR;
                                 break;
                         default:
-                                err("Unknown Power State detected");
+                                err("Unknown Power State %d detected"
+					" for the server in bay %d",
+					response->powerState,
+					response->bayNumber);
                                 return SA_ERR_HPI_INTERNAL_ERROR;
                 }
 
-                hotswap_state = (struct ov_rest_hotswap_state *)
-                        g_malloc0(sizeof(struct ov_rest_hotswap_state));
+                hotswap_state = (struct ovRestHotswapState *)
+                        g_malloc0(sizeof(struct ovRestHotswapState));
                 if (hotswap_state == NULL) {
                         err("Out of memory");
                         return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2853,7 +3925,8 @@ SaErrorT build_discovered_server_rpt(struct oh_handler_state *oh_handler,
                                         SAHPI_HS_STATE_INACTIVE;
                                 break;
                         default:
-                                err("unknown power status");
+                                err("Unknown power status %d for server"
+				" in bay %d", state, response->bayNumber);
                                 wrap_g_free(hotswap_state);
                                 return SA_ERR_HPI_INTERNAL_ERROR;
                 }
@@ -2861,7 +3934,7 @@ SaErrorT build_discovered_server_rpt(struct oh_handler_state *oh_handler,
         /* Add the server rpt to the plugin RPTable */
         rv = oh_add_resource(oh_handler->rptcache, &rpt, hotswap_state, 0);
         if (rv != SA_OK) {
-                err("Failed to add Server rpt");
+                err("Failed to add Server rpt in bay %d", response->bayNumber);
                 wrap_g_free(hotswap_state);
                 return rv;
         }
@@ -2901,7 +3974,7 @@ SaErrorT ov_rest_build_server_rpt(struct oh_handler_state *oh_handler,
 	SaErrorT rv = SA_OK;
 	SaHpiEntityPathT entity_path = {{{0}}};
 	char *entity_root = NULL;
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	SaHpiResourceIdT enc_rid;
 	SaHpiRptEntryT *enc_rpt = NULL;
 	struct ov_rest_handler* ov_handler = NULL;
@@ -2915,7 +3988,8 @@ SaErrorT ov_rest_build_server_rpt(struct oh_handler_state *oh_handler,
 			"entity_root");
 	rv = oh_encode_entitypath(entity_root, &entity_path);
 	if (rv != SA_OK) {
-		err("Encoding entity path failed");
+		err("Encoding entity path failed for server in bay %d",
+						response->bayNumber);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 
@@ -2940,7 +4014,7 @@ SaErrorT ov_rest_build_server_rpt(struct oh_handler_state *oh_handler,
 			SAHPI_ENT_SYSTEM_CHASSIS;
 		enclosure = ov_handler->ov_rest_resources.enclosure;
 		while(enclosure){
-			if(strstr(response->locationUri, enclosure->serial_number)){
+			if(strstr(response->locationUri, enclosure->serialNumber)){
 				break;
 			}
 			enclosure = enclosure->next;
@@ -2951,8 +4025,9 @@ SaErrorT ov_rest_build_server_rpt(struct oh_handler_state *oh_handler,
 						enc_rid);
 		}else{
 			err("Could not find the associated enclosure"
-				" for the server in bay %d, parent location uri"
-				" %s",response->bayNumber, response->locationUri);
+				" for the server in bay %d, parent location "
+				" uri %s", response->bayNumber,
+					response->locationUri);
 			return SA_ERR_HPI_INTERNAL_ERROR;
 		}
 		rpt->ResourceEntity.Entry[1].EntityLocation = 
@@ -2962,20 +4037,27 @@ SaErrorT ov_rest_build_server_rpt(struct oh_handler_state *oh_handler,
 			SAHPI_ENT_SYSTEM_BLADE;
 		rpt->ResourceEntity.Entry[0].EntityLocation = 
 			response->bayNumber;
-	}
-	else{
+
+	}else{
+	/*Below commented code is useful in future when we add support for RMS*/
+/*
 		rpt->ResourceEntity.Entry[1].EntityType = SAHPI_ENT_ROOT;
 		rpt->ResourceEntity.Entry[1].EntityLocation = 0; 
 		rpt->ResourceEntity.Entry[0].EntityType =
 			SAHPI_ENT_RACK_MOUNTED_SERVER;
 		rpt->ResourceEntity.Entry[0].EntityLocation =
 			++ov_handler->current_rms_count;
-
-	}	
+*/
+		err("The server-hardware %s bayNumber is %d."
+		"Incomplete information, so this resource can't be added"
+			,response->model, response->bayNumber);
+		return SA_ERR_HPI_INTERNAL_ERROR;
+	}
 
 	rv = oh_concat_ep(&rpt->ResourceEntity, &entity_path);
 	if (rv != SA_OK) {
-		err("internal error (oh_concat_ep call)");
+		err("Internal error (oh_concat_ep call) for server in bay %d",
+						response->bayNumber);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 
@@ -3062,7 +4144,7 @@ SaErrorT ov_rest_build_server_rdr(struct oh_handler_state *oh_handler,
         }
         rpt = oh_get_resource_by_id (oh_handler->rptcache, resource_id);
         if (rpt == NULL) {
-                err("INVALID RESOURCE");
+                err("There is no server with the resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
 
@@ -3071,12 +4153,14 @@ SaErrorT ov_rest_build_server_rdr(struct oh_handler_state *oh_handler,
         rv = ov_rest_build_server_inv_rdr(oh_handler, resource_id,
                                   &rdr, &inventory, response);
         if (rv != SA_OK) {
-                err("Failed to get server inventory RDR");
+                err("Failed to get server inventory RDR for resource id %d",
+						resource_id);
                 return rv;
         }
         rv = oh_add_rdr(oh_handler->rptcache, resource_id, &rdr, inventory, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add rdr for server resource id %d",
+							resource_id);
                 return rv;
         }
 
@@ -3186,17 +4270,17 @@ SaErrorT ov_rest_discover_server(struct oh_handler_state *handler)
 	struct serverhardwareInfoArrayResponse response = {0};
 	struct enclosureInfoArrayResponse enclosure_response = {0};
 	struct serverhardwareInfo info_result = {0};
-	struct enclosureInfo enclosure_info = {{0}};
+	struct enclosureInfo enc_info = {{0}};
 	char*  server_doc = NULL, *enclosure_doc = NULL, *s = NULL;        
 	/* this Pointer must be freed at the end of this funtion */
 	int i = 0, arraylen = 0;
 	char* blade_name = NULL;
 	json_object *jvalue = NULL;
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 
 	ov_handler = (struct ov_rest_handler *) handler->data;
 
-	asprintf(&ov_handler->connection->url, OV_SERVER_HARDWARE_URI, 
+	WRAP_ASPRINTF(&ov_handler->connection->url, OV_SERVER_HARDWARE_URI, 
 			ov_handler->connection->hostname);
 	rv = ov_rest_getserverInfoArray(handler, &response, 
 					ov_handler->connection,server_doc);
@@ -3242,11 +4326,11 @@ SaErrorT ov_rest_discover_server(struct oh_handler_state *handler)
 			
 			g_hash_table_insert(ov_handler->uri_rid, g_strdup
 					(info_result.uri), g_strdup(s));
-			/* Update resource_status structure with resource_id,
-			 * serial_number, and presence status
+			/* Update resource_info structure with resource_id,
+			 * serialNumber, and presence status
 			 */
 			wrap_free(s);
-			asprintf(&ov_handler->connection->url, "https://%s%s",
+			WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
 					ov_handler->connection->hostname,
 					info_result.locationUri);
 			rv = ov_rest_getenclosureInfoArray(handler, 
@@ -3259,13 +4343,13 @@ SaErrorT ov_rest_discover_server(struct oh_handler_state *handler)
 			}
 			ov_rest_json_parse_enclosure(
 				enclosure_response.enclosure_array, 
-				&enclosure_info);
+				&enc_info);
 			ov_rest_wrap_json_object_put(
 						enclosure_response.root_jobj);
                         enclosure = ov_handler->ov_rest_resources.enclosure;
                         while(enclosure != NULL){
-                                if(strstr(enclosure->serial_number,
-					enclosure_info.serialNumber)){
+                                if(strstr(enclosure->serialNumber,
+					enc_info.serialNumber)){
                                         ov_rest_update_resource_status(
 						&enclosure->server,
 						info_result.bayNumber,
@@ -3324,7 +4408,7 @@ SaErrorT ov_rest_build_drive_enclosure_rpt(struct oh_handler_state *oh_handler,
         char *entity_root = NULL;
         SaHpiResourceIdT enc_rid;
         SaHpiRptEntryT *enc_rpt = NULL;
-        struct enclosure_status *enclosure = NULL;
+        struct enclosureStatus *enclosure = NULL;
         struct ov_rest_handler* ov_handler = NULL;
 
         if (oh_handler == NULL || response == NULL || rpt == NULL) {
@@ -3336,7 +4420,8 @@ SaErrorT ov_rest_build_drive_enclosure_rpt(struct oh_handler_state *oh_handler,
                         "entity_root");
         rv = oh_encode_entitypath(entity_root, &entity_path);
         if (rv != SA_OK) {
-                err("Encoding entity path failed");
+                err("Encoding entity path failed for the drive enclosure"
+			" in bay %d", response->bayNumber);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -3360,7 +4445,7 @@ SaErrorT ov_rest_build_drive_enclosure_rpt(struct oh_handler_state *oh_handler,
 					SAHPI_ENT_SYSTEM_CHASSIS;
 		enclosure = ov_handler->ov_rest_resources.enclosure;
 		while(enclosure){
-			if(strstr(response->locationUri, enclosure->serial_number)){
+			if(strstr(response->locationUri, enclosure->serialNumber)){
 				break;
 			}
 			enclosure = enclosure->next;
@@ -3371,8 +4456,10 @@ SaErrorT ov_rest_build_drive_enclosure_rpt(struct oh_handler_state *oh_handler,
 						enc_rid);
 		}else{
 			err("Could not find the associated enclosure"
-				" for the server in bay %d, parent location uri"
-				" %s",response->bayNumber, response->locationUri);
+				" for the drive enclosure in bay %d, parent"
+				" location uri %s",
+				response->bayNumber,
+				response->locationUri);
 			return SA_ERR_HPI_INTERNAL_ERROR;
 		}
                 rpt->ResourceEntity.Entry[1].EntityLocation = 
@@ -3395,7 +4482,8 @@ SaErrorT ov_rest_build_drive_enclosure_rpt(struct oh_handler_state *oh_handler,
 
         rv = oh_concat_ep(&rpt->ResourceEntity, &entity_path);
         if (rv != SA_OK) {
-                err("internal error (oh_concat_ep call)");
+                err("Internal error (oh_concat_ep call) for drive enclosure"
+			" in bay %d", response->bayNumber);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -3466,7 +4554,7 @@ SaErrorT build_discovered_drive_enclosure_rpt(
 {
         SaErrorT rv = SA_OK;
         SaHpiPowerStateT state;
-        struct ov_rest_hotswap_state *hotswap_state = NULL;
+        struct ovRestHotswapState *hotswap_state = NULL;
         SaHpiRptEntryT rpt = {0};
 
         if (oh_handler == NULL || response == NULL ||
@@ -3477,7 +4565,8 @@ SaErrorT build_discovered_drive_enclosure_rpt(
 
         if(ov_rest_build_drive_enclosure_rpt(oh_handler, response, &rpt) 
 								!= SA_OK) {
-                err("Building Server Rpt failed during discovery");
+                err("Building Rpt failed during discovery for drive enclosure"
+				" in bay %d", response->bayNumber);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -3500,12 +4589,15 @@ SaErrorT build_discovered_drive_enclosure_rpt(
                                 state = SAHPI_POWER_ON;
                                 break;
                         default:
-                                err("Unknown Power State detected");
+                                err("Unknown Power State %d detected"
+					" for drive enclosure in bay"
+					" %d", response->powerState,
+						response->bayNumber);
                                 return SA_ERR_HPI_INTERNAL_ERROR;
                 }
 
-                hotswap_state = (struct ov_rest_hotswap_state *)
-                        g_malloc0(sizeof(struct ov_rest_hotswap_state));
+                hotswap_state = (struct ovRestHotswapState *)
+                        g_malloc0(sizeof(struct ovRestHotswapState));
                 if (hotswap_state == NULL) {
                         err("Out of memory");
                         return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -3522,7 +4614,9 @@ SaErrorT build_discovered_drive_enclosure_rpt(
                                         SAHPI_HS_STATE_INACTIVE;
                                 break;
                         default:
-                                err("unknown power status");
+                                err("Unknown power status %d for"
+					" drive enclosure in bay %d",
+					state, response->bayNumber);
                                 wrap_g_free(hotswap_state);
                                 return SA_ERR_HPI_INTERNAL_ERROR;
                 }
@@ -3530,7 +4624,8 @@ SaErrorT build_discovered_drive_enclosure_rpt(
         /* Add the Drive Enclosure rpt to the plugin RPTable */
         rv = oh_add_resource(oh_handler->rptcache, &rpt, hotswap_state, 0);
         if (rv != SA_OK) {
-                err("Failed to add Server rpt");
+                err("Failed to add drive enclosure rpt in bay %d",
+						response->bayNumber);
                 wrap_g_free(hotswap_state);
                 return rv;
         }
@@ -3573,7 +4668,8 @@ SaErrorT ov_rest_build_drive_enclosure_rdr(struct oh_handler_state *oh_handler,
         }
         rpt = oh_get_resource_by_id (oh_handler->rptcache, resource_id);
         if (rpt == NULL) {
-                err("INVALID RESOURCE");
+                err("RPT is NULL for drive enclosure in bay %d with "
+			"resource id %d", response->bayNumber, resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
 
@@ -3582,12 +4678,15 @@ SaErrorT ov_rest_build_drive_enclosure_rdr(struct oh_handler_state *oh_handler,
         rv = ov_rest_build_drive_enclosure_inv_rdr(oh_handler, resource_id,
                                   &rdr, &inventory, response);
         if (rv != SA_OK) {
-                err("Failed to get Drive Enclosure inventory RDR");
+                err("Failed to get inventory RDR for Drive Enclosure in bay %d"
+			" with resource id %d",
+			response->bayNumber, resource_id);
                 return rv;
         }
         rv = oh_add_rdr(oh_handler->rptcache, resource_id, &rdr, inventory, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add rdr for drive enclosure in bay %d with "
+			"resource id %d", response->bayNumber, resource_id);
                 return rv;
         }
 
@@ -3621,10 +4720,10 @@ SaErrorT ov_rest_discover_drive_enclosure(struct oh_handler_state *handler)
 	int i = 0, arraylen = 0;
 	char* blade_name = NULL;
 	json_object *jvalue = NULL;
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 
 	ov_handler = (struct ov_rest_handler *) handler->data;
-	asprintf(&ov_handler->connection->url, OV_DRIVE_ENCLOSURE_URI,
+	WRAP_ASPRINTF(&ov_handler->connection->url, OV_DRIVE_ENCLOSURE_URI,
 			ov_handler->connection->hostname);
 	rv = ov_rest_getdriveEnclosureInfoArray(handler, 
 			&response, 
@@ -3664,7 +4763,7 @@ SaErrorT ov_rest_discover_drive_enclosure(struct oh_handler_state *handler)
 		rv = build_discovered_drive_enclosure_rpt(handler,
 				&info_result, &resource_id);
 		if(rv != SA_OK){
-			err("Failed to Add Server rpt for bay %d.",
+			err("Failed to add drive enclosure rpt for bay %d.",
 					info_result.bayNumber);
 			continue;
 		}
@@ -3675,12 +4774,12 @@ SaErrorT ov_rest_discover_drive_enclosure(struct oh_handler_state *handler)
 		g_hash_table_insert(ov_handler->uri_rid, 
 				g_strdup(info_result.uri), g_strdup(s));
 		wrap_free(s);
-		/* Update resource_status structure with resource_id,
-		 * serial_number, and presence status
+		/* Update resource_info structure with resource_id,
+		 * serialNumber, and presence status
 		 */
 		enclosure = ov_handler->ov_rest_resources.enclosure;
 		while(enclosure != NULL){
-			if(strstr(enclosure->serial_number,
+			if(strstr(enclosure->serialNumber,
 						info_result.enc_serialNumber)){
 				ov_rest_update_resource_status (
 						&enclosure->server,
@@ -3700,8 +4799,13 @@ SaErrorT ov_rest_discover_drive_enclosure(struct oh_handler_state *handler)
 		}
 
 		/* Build rdr entry for server */
-		ov_rest_build_drive_enclosure_rdr(handler, 
+		rv = ov_rest_build_drive_enclosure_rdr(handler, 
 				resource_id, &info_result);
+		if(rv != SA_OK){
+			err("Failed to add drive enclosure rdr for bay %d.",
+				info_result.bayNumber);
+			continue;
+		}
 	}
 	ov_rest_wrap_json_object_put(response.root_jobj);
 	return SA_OK;
@@ -3733,11 +4837,11 @@ SaErrorT ov_rest_build_interconnect_rpt(struct oh_handler_state *oh_handler,
 	SaErrorT rv = SA_OK;
 	SaHpiEntityPathT entity_path = {{{0}}};
 	char *entity_root = NULL;
-	struct ov_rest_hotswap_state *hotswap_state = NULL;
+	struct ovRestHotswapState *hotswap_state = NULL;
 	SaHpiRptEntryT rpt = {0};
 	char temp[256];
 	struct ov_rest_handler *ov_handler = NULL;
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	SaHpiResourceIdT enc_rid;
 	SaHpiRptEntryT *enc_rpt = NULL;
 
@@ -3757,7 +4861,8 @@ SaErrorT ov_rest_build_interconnect_rpt(struct oh_handler_state *oh_handler,
 			"entity_root");
 	rv = oh_encode_entitypath(entity_root, &entity_path);
 	if (rv != SA_OK) {
-		err("Encoding entity path failed");
+		err("Encoding entity path failed for interconnect in"
+				" bay %d", response->bayNumber);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 
@@ -3777,7 +4882,7 @@ SaErrorT ov_rest_build_interconnect_rpt(struct oh_handler_state *oh_handler,
 	rpt.ResourceEntity.Entry[1].EntityType = SAHPI_ENT_SYSTEM_CHASSIS;
 	enclosure = ov_handler->ov_rest_resources.enclosure;
 	while(enclosure){
-		if(strstr(response->locationUri, enclosure->serial_number)){
+		if(strstr(response->locationUri, enclosure->serialNumber)){
 			break;
 		}
 		enclosure = enclosure->next;
@@ -3788,8 +4893,10 @@ SaErrorT ov_rest_build_interconnect_rpt(struct oh_handler_state *oh_handler,
 				enc_rid);
 	}else{
 		err("Could not find the associated enclosure"
-				" for the server in bay %d, parent location uri"
-				" %s",response->bayNumber, response->locationUri);
+				" for the interconnect in bay %d, "
+				" parent location uri %s",
+				response->bayNumber,
+				response->locationUri);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 	rpt.ResourceEntity.Entry[1].EntityLocation = 
@@ -3798,7 +4905,8 @@ SaErrorT ov_rest_build_interconnect_rpt(struct oh_handler_state *oh_handler,
 	rpt.ResourceEntity.Entry[0].EntityLocation = response->bayNumber;
 	rv = oh_concat_ep(&(rpt.ResourceEntity), &entity_path);
 	if (rv != SA_OK) {
-		err("concat of entity path failed");
+		err("Concat of entity path failed for the interconnec"
+			" in bay %d", response->bayNumber);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 
@@ -3849,8 +4957,8 @@ SaErrorT ov_rest_build_interconnect_rpt(struct oh_handler_state *oh_handler,
 	snprintf((char *) (rpt.ResourceTag.Data),
 			rpt.ResourceTag.DataLength + 1, "%s", response->model);
 
-	hotswap_state = (struct ov_rest_hotswap_state *)
-		g_malloc0(sizeof(struct ov_rest_hotswap_state));
+	hotswap_state = (struct ovRestHotswapState *)
+		g_malloc0(sizeof(struct ovRestHotswapState));
 	if (hotswap_state == NULL) {
 		err("Out of memory");
 		return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -3874,7 +4982,10 @@ SaErrorT ov_rest_build_interconnect_rpt(struct oh_handler_state *oh_handler,
 				SAHPI_HS_STATE_INACTIVE;
 				break;
 			default:
-				err("Unknown Power State detected");
+				err("Unknown Power State %d detected"
+					" for interconnect in bay %d",
+					response->powerState,
+					response->bayNumber);
 				wrap_g_free(hotswap_state);
 				return SA_ERR_HPI_INTERNAL_ERROR;
 		}
@@ -3882,7 +4993,8 @@ SaErrorT ov_rest_build_interconnect_rpt(struct oh_handler_state *oh_handler,
 	/* Add the interconnect rpt to the plugin RPTable */
 	rv = oh_add_resource(oh_handler->rptcache, &rpt, hotswap_state, 0);
 	if (rv != SA_OK) {
-		err("Failed to add Interconnect RPT");
+		err("Failed to add Interconnect RPT in bay %d",
+						response->bayNumber);
 		wrap_g_free(hotswap_state);
 		return rv;
 	}
@@ -3937,12 +5049,14 @@ SaErrorT ov_rest_build_interconnect_rdr(struct oh_handler_state *oh_handler,
         rv = build_interconnect_inv_rdr(oh_handler, resource_id,
                                         &rdr, &inventory, response);
         if (rv != SA_OK) {
-                err("Failed to get interconnect inventory RDR");
+                err("Failed to get interconnect inventory RDR for resource "
+				"id %d", resource_id);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
         rv = oh_add_rdr(oh_handler->rptcache, resource_id, &rdr, inventory, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add rdr for interconnect resource id %d",
+								resource_id);
                 return rv;
         }
 
@@ -3996,8 +5110,8 @@ SaErrorT ov_rest_discover_sas_interconnect(struct oh_handler_state *handler)
 	struct interconnectInfo result = {0};
 	SaHpiResourceIdT resource_id;
 	struct enclosureInfoArrayResponse enclosure_response = {0};
-	struct enclosureInfo enclosure_info = {{0}};
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureInfo enc_info = {{0}};
+	struct enclosureStatus *enclosure = NULL;
 	char *interconnect_doc = NULL, *enclosure_doc = NULL, *s = NULL;
 	json_object *jvalue = NULL;
 	int i = 0, arraylen = 0;
@@ -4008,13 +5122,14 @@ SaErrorT ov_rest_discover_sas_interconnect(struct oh_handler_state *handler)
 	}
 
 	ov_handler = (struct ov_rest_handler *) handler->data;
-	asprintf(&ov_handler->connection->url, OV_SAS_INTERCONNECT_URI,
+	WRAP_ASPRINTF(&ov_handler->connection->url, OV_SAS_INTERCONNECT_URI,
 			ov_handler->connection->hostname);
 	rv = ov_rest_getinterconnectInfoArray(handler, &response,
 			ov_handler->connection,
 			interconnect_doc);
 	if (rv != SA_OK || response.interconnect_array == NULL) {
-		CRIT("No response from ov_rest_getinterconnectInfoArray");
+		CRIT("No response from ov_rest_getinterconnectInfoArray for "
+						"SAS interconnects");
 		return SA_OK;
 	}
 
@@ -4055,12 +5170,12 @@ SaErrorT ov_rest_discover_sas_interconnect(struct oh_handler_state *handler)
 					g_strdup(result.uri),
 					g_strdup(s));
 			wrap_free(s);
-			/* Update resource_status structure with resource_id,
-			 * serial_number, and presence status
+			/* Update resource_info structure with resource_id,
+			 * serialNumber, and presence status
 			 */
 			/* Find the Enclosure for this interconnect to update 
  			 * the Resource matrix table */
-			asprintf(&ov_handler->connection->url, "https://%s%s",
+			WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
 					ov_handler->connection->hostname,
 					result.locationUri);
 			rv = ov_rest_getenclosureInfoArray(handler, 
@@ -4075,14 +5190,14 @@ SaErrorT ov_rest_discover_sas_interconnect(struct oh_handler_state *handler)
 			}
 			ov_rest_json_parse_enclosure(
 					enclosure_response.enclosure_array,
-					&enclosure_info);
+					&enc_info);
 			ov_rest_wrap_json_object_put(
 					enclosure_response.root_jobj);
 
 			enclosure = ov_handler->ov_rest_resources.enclosure;
 			while(enclosure != NULL){
-				if(strstr(enclosure->serial_number,
-						enclosure_info.serialNumber)){
+				if(strstr(enclosure->serialNumber,
+						enc_info.serialNumber)){
 					ov_rest_update_resource_status (
 						&enclosure->interconnect,
 						result.bayNumber,
@@ -4095,7 +5210,7 @@ SaErrorT ov_rest_discover_sas_interconnect(struct oh_handler_state *handler)
 				enclosure = enclosure->next;
 			}
 			if(enclosure == NULL){
-				CRIT("Enclosure data of the interconnect"
+				CRIT("Enclosure data of the sas interconnect"
 					" serial number %s is unavailable",
 						result.serialNumber);
 				continue;
@@ -4108,11 +5223,11 @@ SaErrorT ov_rest_discover_sas_interconnect(struct oh_handler_state *handler)
 			wrap_g_free(s);
 		}
 		ov_rest_wrap_json_object_put(response.root_jobj);
-		if(response.next_page == NULL){
+		if(response.next_page[0] == '\0'){
 			break;
 		}
 		else{
-			asprintf(&ov_handler->connection->url, "https://%s%s",
+			WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
 					ov_handler->connection->hostname,
 					response.next_page);
 			memset(&response, 0, sizeof(response));
@@ -4122,7 +5237,8 @@ SaErrorT ov_rest_discover_sas_interconnect(struct oh_handler_state *handler)
 					interconnect_doc);
 			if (rv != SA_OK || response.interconnect_array == NULL){
 				CRIT("No response from "
-					"ov_rest_getinterconnectInfoArray");
+					"ov_rest_getinterconnectInfoArray "
+					"for sas-interconnects");
 				return SA_OK;
 			}
 			/* Checking for json object type, if it is not array, 
@@ -4160,10 +5276,10 @@ SaErrorT ov_rest_discover_interconnect(struct oh_handler_state *handler)
 	struct interconnectInfoArrayResponse response = {0};
 	struct interconnectInfo result = {0};
 	struct enclosureInfoArrayResponse enclosure_response = {0};
-	struct enclosureInfo enclosure_info = {{0}};
+	struct enclosureInfo enc_info = {{0}};
 	char* interconnect_doc = NULL, *enclosure_doc = NULL, *s = NULL;   
 	int i = 0,arraylen = 0;
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	json_object *jvalue = NULL;
 
 	if (handler == NULL || handler->data == NULL) {
@@ -4172,13 +5288,14 @@ SaErrorT ov_rest_discover_interconnect(struct oh_handler_state *handler)
 	}
 
 	ov_handler = (struct ov_rest_handler *) handler->data;
-	asprintf(&ov_handler->connection->url, OV_INTERCONNECT_URI, 
+	WRAP_ASPRINTF(&ov_handler->connection->url, OV_INTERCONNECT_URI, 
 			ov_handler->connection->hostname);
 	rv = ov_rest_getinterconnectInfoArray(handler, &response, 
 			ov_handler->connection, interconnect_doc);
 	if(rv != SA_OK || response.interconnect_array == NULL){
 		CRIT("Failed to get the response from "
-				"ov_rest_getinterconnectInfoArray");
+			"ov_rest_getinterconnectInfoArray for "
+				"interconnects");
 
 		return SA_OK;
 	}
@@ -4222,12 +5339,12 @@ SaErrorT ov_rest_discover_interconnect(struct oh_handler_state *handler)
 					g_strdup(result.uri),
 					g_strdup(s));
 			wrap_free(s);
-			/* Update resource_status structure with resource_id,
-			 * serial_number, and presence status
+			/* Update resource_info structure with resource_id,
+			 * serialNumber, and presence status
 			 */
 			/* Find the Enclosure for this interconnect to update 
  			 * the Resource matrix table */
-			asprintf(&ov_handler->connection->url, "https://%s%s",
+			WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
 					ov_handler->connection->hostname,
 					result.locationUri);
 			rv = ov_rest_getenclosureInfoArray(handler, 
@@ -4242,14 +5359,14 @@ SaErrorT ov_rest_discover_interconnect(struct oh_handler_state *handler)
 			} 
 			ov_rest_json_parse_enclosure(
 					enclosure_response.enclosure_array,
-					&enclosure_info);
+					&enc_info);
 			ov_rest_wrap_json_object_put(
 				enclosure_response.root_jobj);
 
 			enclosure = ov_handler->ov_rest_resources.enclosure;
 			while(enclosure != NULL){
-				if(strstr(enclosure->serial_number,
-					enclosure_info.serialNumber)){
+				if(strstr(enclosure->serialNumber,
+					enc_info.serialNumber)){
 					ov_rest_update_resource_status(
 							&enclosure->interconnect,
 							result.bayNumber, 
@@ -4274,10 +5391,10 @@ SaErrorT ov_rest_discover_interconnect(struct oh_handler_state *handler)
 			wrap_g_free(s);
 		}
 		ov_rest_wrap_json_object_put(response.root_jobj);
-		if(response.next_page == NULL){
+		if(response.next_page[0] == '\0'){
 			break;
 		}else {
-			asprintf(&ov_handler->connection->url, "https://%s%s",
+			WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
 					ov_handler->connection->hostname,
 					response.next_page);
 			memset(&response, 0, sizeof(response));
@@ -4287,7 +5404,8 @@ SaErrorT ov_rest_discover_interconnect(struct oh_handler_state *handler)
 					interconnect_doc);
 			if(rv != SA_OK || response.interconnect_array == NULL){
 				CRIT("Failed to get the response from "
-					"ov_rest_getinterconnectInfoArray");
+					"ov_rest_getinterconnectInfoArray "
+					"for interconnects");
 
 				return SA_OK;
 			}
@@ -4342,7 +5460,7 @@ SaErrorT build_powersupply_inv_rdr(struct oh_handler_state *oh_handler,
        SaErrorT rv = SA_OK;
        char power_inv_str[] = POWER_SUPPLY_INVENTORY_STRING;
        struct ov_rest_inventory *local_inventory = NULL;
-       struct ov_rest_area *head_area = NULL;
+       struct ovRestArea *head_area = NULL;
        SaHpiInt32T add_success_flag = 0;
        SaHpiInt32T area_count = 0;
        SaHpiRptEntryT *rpt = NULL;
@@ -4356,7 +5474,8 @@ SaErrorT build_powersupply_inv_rdr(struct oh_handler_state *oh_handler,
        /* Get the rpt entry of the resource */
        rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
        if (rpt == NULL) {
-               err("resource RPT is NULL");
+               err("RPT is NULL for powersupply in bay %d with resource id %d",
+					response->bayNumber, resource_id);
                return SA_ERR_HPI_INTERNAL_ERROR;
        }
 
@@ -4396,10 +5515,11 @@ SaErrorT build_powersupply_inv_rdr(struct oh_handler_state *oh_handler,
         */
        rv = ov_rest_add_product_area(&local_inventory->info.area_list,
                        response->model,
-                       NULL,
+                       "HPE",
                        &add_success_flag);
        if (rv != SA_OK) {
-               err("Add product area failed");
+               err("Add product area failed for powersupply resource id %d",
+							resource_id);
                return rv;
        }
 
@@ -4423,7 +5543,8 @@ SaErrorT build_powersupply_inv_rdr(struct oh_handler_state *oh_handler,
                        response->serialNumber,
                        &add_success_flag);
        if (rv != SA_OK) {
-               err("Add board area failed");
+               err("Add board area failed for powersupply resource id %d",
+						resource_id);
                return rv;
        }
        if (add_success_flag != SAHPI_FALSE) {
@@ -4479,12 +5600,14 @@ SaErrorT ov_rest_build_powersupply_rdr(struct oh_handler_state *oh_handler,
         rv = build_powersupply_inv_rdr(oh_handler, resource_id,
                                         &rdr, &inventory, response);
         if (rv != SA_OK) {
-                err("Failed to build powersupply inventory RDR");
+                err("Failed to build powersupply inventory RDR of resource "
+						"id %d", resource_id);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
         rv = oh_add_rdr(oh_handler->rptcache, resource_id, &rdr, inventory, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add rdr for powersupply resource id %d",
+								resource_id);
                 return rv;
         }
 
@@ -4537,7 +5660,7 @@ SaErrorT ov_rest_build_powersupply_rpt(struct oh_handler_state *oh_handler,
         SaErrorT rv = SA_OK;
         SaHpiEntityPathT entity_path = {{{0}}};
         char *entity_root = NULL;
-        struct ov_rest_hotswap_state *hotswap_state = NULL;
+        struct ovRestHotswapState *hotswap_state = NULL;
         SaHpiRptEntryT rpt = {0};
         struct ov_rest_handler *ov_handler = NULL;
 
@@ -4558,7 +5681,8 @@ SaErrorT ov_rest_build_powersupply_rpt(struct oh_handler_state *oh_handler,
                         "entity_root");
         rv = oh_encode_entitypath(entity_root, &entity_path);
         if (rv != SA_OK) {
-                err("Encoding entity path failed");
+                err("Encoding entity path failed for powersupply in bay %d",
+							response->bayNumber);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -4577,7 +5701,8 @@ SaErrorT ov_rest_build_powersupply_rpt(struct oh_handler_state *oh_handler,
         rpt.ResourceEntity.Entry[0].EntityLocation = response->bayNumber;
         rv = oh_concat_ep(&(rpt.ResourceEntity), &entity_path);
         if (rv != SA_OK) {
-                err("concat of entity path failed");
+                err("Concat of entity path failed for powersupply in "
+			"bay %d", response->bayNumber);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -4604,6 +5729,7 @@ SaErrorT ov_rest_build_powersupply_rpt(struct oh_handler_state *oh_handler,
                         rpt.ResourceFailed = SAHPI_TRUE;
         }
         rpt.HotSwapCapabilities = 0x0;
+        rpt.ResourceInfo.ManufacturerId = HPE_MANUFACTURING_ID;
         rpt.ResourceTag.DataType = SAHPI_TL_TYPE_TEXT;
         rpt.ResourceTag.Language = SAHPI_LANG_ENGLISH;
         ov_rest_trim_whitespace(response->model);
@@ -4615,7 +5741,8 @@ SaErrorT ov_rest_build_powersupply_rpt(struct oh_handler_state *oh_handler,
         /* Add the interconnect rpt to the plugin RPTable */
         rv = oh_add_resource(oh_handler->rptcache, &rpt, NULL, 0);
         if (rv != SA_OK) {
-                err("Failed to add PowerSupply RPT");
+                err("Failed to add PowerSupply RPT in bay %d",
+						response->bayNumber);
                 wrap_g_free(hotswap_state);
                 return rv;
         }
@@ -4647,12 +5774,12 @@ SaErrorT ov_rest_discover_powersupply(struct oh_handler_state *oh_handler)
 	SaHpiResourceIdT resource_id;
 	char* enclosure_doc = NULL, *s = NULL;
 	int i = 0,j = 0,arraylen = 0;
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	json_object *jvalue = NULL, *jvalue_ps = NULL, *jvalue_ps_array = NULL;
 
 	ov_handler = (struct ov_rest_handler *) oh_handler->data;
 
-	asprintf(&ov_handler->connection->url, OV_ENCLOSURE_URI,
+	WRAP_ASPRINTF(&ov_handler->connection->url, OV_ENCLOSURE_URI,
 			ov_handler->connection->hostname);
 	rv = ov_rest_getenclosureInfoArray(oh_handler, &response,
 			ov_handler->connection, enclosure_doc);
@@ -4672,7 +5799,7 @@ SaErrorT ov_rest_discover_powersupply(struct oh_handler_state *oh_handler)
 	for (i=0; i< arraylen; i++){
 		jvalue = json_object_array_get_idx(response.enclosure_array,i);
 		if (!jvalue) {
-			CRIT("Invalid response for the enclosure in bay %d",
+			CRIT("Invalid response for the enclosure %d",
 				i + 1);
 			continue;
 		}
@@ -4691,7 +5818,7 @@ SaErrorT ov_rest_discover_powersupply(struct oh_handler_state *oh_handler)
 					j);
 			if (!jvalue_ps) {
 				CRIT("Invalid response for the powersupply"
-					" in bay %d", i + 1);
+					" in bay %d", j + 1);
 				continue;
 			}
 			ov_rest_json_parse_powersupply(jvalue_ps, &result);
@@ -4700,13 +5827,14 @@ SaErrorT ov_rest_discover_powersupply(struct oh_handler_state *oh_handler)
 			rv = ov_rest_build_powersupply_rpt(oh_handler, &result,
 					&resource_id, i+1);
 			if (rv != SA_OK) {
-				err("build PowerSupply rpt failed");
+				err("Build PowerSupply rpt failed placed in "
+					"bay %d", j + 1);
 				return rv;
 			}
-			enclosure = (struct enclosure_status *)
+			enclosure = (struct enclosureStatus *)
 				ov_handler->ov_rest_resources.enclosure;
 			while(enclosure != NULL){
-				if(!strcmp(enclosure->serial_number,
+				if(!strcmp(enclosure->serialNumber,
 					enclosure_result.serialNumber)){
 					ov_rest_update_resource_status(
 						&enclosure->ps_unit,
@@ -4727,7 +5855,8 @@ SaErrorT ov_rest_discover_powersupply(struct oh_handler_state *oh_handler)
 			rv = ov_rest_build_powersupply_rdr(oh_handler,
 					resource_id, &result);
 			if (rv != SA_OK) {
-				err("build PowerSupply rdr failed");
+				err("Build PowerSupply rdr failed placed in "
+					"bay %d", j + 1);
 				wrap_free(s);
 				ov_rest_wrap_json_object_put(
 						response.root_jobj);
@@ -4770,7 +5899,7 @@ SaErrorT ov_rest_build_fan_inv_rdr(struct oh_handler_state *oh_handler,
        SaErrorT rv = SA_OK;
        char fan_inv_str[] = FAN_INVENTORY_STRING;
        struct ov_rest_inventory *local_inventory = NULL;
-       struct ov_rest_area *head_area = NULL;
+       struct ovRestArea *head_area = NULL;
        SaHpiInt32T add_success_flag = 0;
        SaHpiInt32T area_count = 0;
        SaHpiRptEntryT *rpt = NULL;
@@ -4784,7 +5913,8 @@ SaErrorT ov_rest_build_fan_inv_rdr(struct oh_handler_state *oh_handler,
        /* Get the rpt entry of the resource */
        rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
        if (rpt == NULL) {
-               err("resource RPT is NULL");
+               err("RPT is NULL for fan in bay %d with resource id %d",
+					response->bayNumber, resource_id);
                return SA_ERR_HPI_INTERNAL_ERROR;
        }
 
@@ -4824,10 +5954,11 @@ SaErrorT ov_rest_build_fan_inv_rdr(struct oh_handler_state *oh_handler,
         */
        rv = ov_rest_add_product_area(&local_inventory->info.area_list,
                        response->model,
-                       NULL,
+                       "HPE",
                        &add_success_flag);
        if (rv != SA_OK) {
-               err("Add product area failed");
+               err("Add product area failed for fan resource id %d",
+							resource_id);
                return rv;
        }
 
@@ -4851,7 +5982,8 @@ SaErrorT ov_rest_build_fan_inv_rdr(struct oh_handler_state *oh_handler,
                        response->serialNumber,
                        &add_success_flag);
        if (rv != SA_OK) {
-               err("Add board area failed");
+               err("Add board area failed for fan resource id %d",
+							resource_id);
                return rv;
        }
        if (add_success_flag != SAHPI_FALSE) {
@@ -4905,12 +6037,13 @@ SaErrorT ov_rest_build_fan_rdr(struct oh_handler_state *oh_handler,
 	rv = ov_rest_build_fan_inv_rdr(oh_handler, resource_id,
 			&rdr, &inventory, response);
 	if (rv != SA_OK) {
-		err("Failed to build Fan inventory RDR");
+		err("Failed to build Fan inventory RDR for resource id %d",
+						resource_id);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 	rv = oh_add_rdr(oh_handler->rptcache, resource_id, &rdr, inventory, 0);
 	if (rv != SA_OK) {
-		err("Failed to add rdr");
+		err("Failed to add rdr for fan resource id %d", resource_id);
 		return rv;
 	}
 
@@ -4984,7 +6117,8 @@ SaErrorT ov_rest_build_fan_rpt(struct oh_handler_state *oh_handler,
                         "entity_root");
         rv = oh_encode_entitypath(entity_root, &entity_path);
         if (rv != SA_OK) {
-                err("Encoding entity path failed");
+                err("Encoding entity path failed for fan in bay %d",
+							response->bayNumber);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -5003,7 +6137,8 @@ SaErrorT ov_rest_build_fan_rpt(struct oh_handler_state *oh_handler,
         rpt.ResourceEntity.Entry[0].EntityLocation = response->bayNumber;
         rv = oh_concat_ep(&(rpt.ResourceEntity), &entity_path);
         if (rv != SA_OK) {
-                err("concat of entity path failed");
+                err("Concat of entity path failed for fan in bay %d",
+					response->bayNumber);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
         switch(response->status){
@@ -5029,6 +6164,7 @@ SaErrorT ov_rest_build_fan_rpt(struct oh_handler_state *oh_handler,
         }
         rpt.ResourceId = oh_uid_from_entity_path(&(rpt.ResourceEntity));
         rpt.HotSwapCapabilities = 0x0;
+        rpt.ResourceInfo.ManufacturerId = HPE_MANUFACTURING_ID;
         rpt.ResourceTag.DataType = SAHPI_TL_TYPE_TEXT;
         rpt.ResourceTag.Language = SAHPI_LANG_ENGLISH;
         ov_rest_trim_whitespace(response->model);
@@ -5071,13 +6207,13 @@ SaErrorT ov_rest_discover_fan(struct oh_handler_state *oh_handler)
 	SaHpiResourceIdT resource_id;
 	char* enclosure_doc = NULL, *s = NULL;
 	int i = 0,j = 0,arraylen = 0;
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	json_object *jvalue = NULL, *jvalue_fan = NULL, 
 	*jvalue_fan_array = NULL;
 
 	ov_handler = (struct ov_rest_handler *) oh_handler->data;
 
-	asprintf(&ov_handler->connection->url, OV_ENCLOSURE_URI,
+	WRAP_ASPRINTF(&ov_handler->connection->url, OV_ENCLOSURE_URI,
 			ov_handler->connection->hostname);
 	rv = ov_rest_getenclosureInfoArray(oh_handler, &response,
 			ov_handler->connection, enclosure_doc);
@@ -5114,7 +6250,7 @@ SaErrorT ov_rest_discover_fan(struct oh_handler_state *oh_handler)
 					jvalue_fan_array, j);
 			if (!jvalue_fan) {
 				CRIT("Invalid response for the fan in bay %d",
-					i + 1);
+					j + 1);
 				continue;
 			}	
 			ov_rest_json_parse_fan(jvalue_fan, &result);
@@ -5123,15 +6259,15 @@ SaErrorT ov_rest_discover_fan(struct oh_handler_state *oh_handler)
 			rv = ov_rest_build_fan_rpt(oh_handler, &result,
 					&resource_id, i+1);
 			if (rv != SA_OK) {
-				err("build Fan rpt failed");
+				err("Build Fan rpt failed in bay %d", j + 1);
 				ov_rest_wrap_json_object_put(
 							response.root_jobj);
 				return rv;
 			}
-			enclosure = (struct enclosure_status *)
+			enclosure = (struct enclosureStatus *)
 				ov_handler->ov_rest_resources.enclosure;
 			while(enclosure != NULL){
-				if(!strcmp(enclosure->serial_number,
+				if(!strcmp(enclosure->serialNumber,
 					enclosure_result.serialNumber)){
 					ov_rest_update_resource_status(
 						&enclosure->fan,
@@ -5152,7 +6288,7 @@ SaErrorT ov_rest_discover_fan(struct oh_handler_state *oh_handler)
 			rv = ov_rest_build_fan_rdr(oh_handler,
 					resource_id, &result);
 			if (rv != SA_OK) {
-				err("build Fan rdr failed");
+				err("Build Fan rdr failed in bay %d", j + 1);
 				wrap_free(s);
 				ov_rest_wrap_json_object_put(
 						response.root_jobj);
@@ -5234,7 +6370,7 @@ SaErrorT ov_rest_build_temperature_sensor_rdr(
                 /* Sensor specific information is stored in this structure */
                 sensor_info = g_malloc0(sizeof(struct ov_rest_sensor_info));
                 if (sensor_info == NULL) {
-                        err("ov_rest out of memory");
+                        err("OV_REST out of memory");
                         return SA_ERR_HPI_OUT_OF_MEMORY;
                 }
                 sensor_info->current_state = SAHPI_ES_UNSPECIFIED;
@@ -5261,7 +6397,8 @@ SaErrorT ov_rest_build_temperature_sensor_rdr(
                 rv = oh_add_rdr(oh_handler->rptcache, rpt->ResourceId, &rdr,
                                                         sensor_info, 0);
                 if (rv != SA_OK) {
-                        err("Failed to add rdr");
+                        err("Failed to add temperature sensor rdr for "
+					"resource id %d", rpt->ResourceId);
                         return rv;
                 }
         }
@@ -5324,7 +6461,7 @@ SaErrorT ov_rest_build_fan_sensor_rdr_info(struct oh_handler_state *oh_handler,
                 /* Sensor specific information is stored in this structure */
                 sensor_info = g_malloc0(sizeof(struct ov_rest_sensor_info));
                 if (sensor_info == NULL) {
-                        err("ov_rest out of memory");
+                        err("OV_REST out of memory");
                         return SA_ERR_HPI_OUT_OF_MEMORY;
                 }
                 sensor_info->current_state = SAHPI_ES_UNSPECIFIED;
@@ -5341,7 +6478,8 @@ SaErrorT ov_rest_build_fan_sensor_rdr_info(struct oh_handler_state *oh_handler,
                 rv = oh_add_rdr(oh_handler->rptcache, rpt->ResourceId, &rdr,
                                                         sensor_info, 0);
                 if (rv != SA_OK) {
-                        err("Failed to add rdr");
+                        err("Failed to add fan sensor rdr for resource id %d",
+						rpt->ResourceId);
                         return rv;
                 }
         }
@@ -5407,7 +6545,8 @@ SaErrorT ov_rest_build_server_thermal_rdr(struct oh_handler_state *oh_handler,
                 rv = ov_rest_build_temperature_sensor_rdr(oh_handler,
                                                 server_therm_info, rpt);
                 if (rv != SA_OK) {
-                        err("Error in building temperature sensors");
+                        err("Error in building temperature sensors for server"
+				" in bay %d", i+1);
                         return SA_ERR_HPI_INTERNAL_ERROR;
                 }
         }
@@ -5438,7 +6577,8 @@ SaErrorT ov_rest_build_server_thermal_rdr(struct oh_handler_state *oh_handler,
                 rv = ov_rest_build_fan_sensor_rdr_info(oh_handler, 
 				server_fan_info, rpt);
                 if (rv != SA_OK) {
-                        err("Error in building fan sensors");
+                        err("Error in building fan sensors for server in"
+				" bay %d", i + 1);
                         return SA_ERR_HPI_INTERNAL_ERROR;
                 }
         }
@@ -5502,7 +6642,7 @@ SaErrorT ov_rest_build_server_power_status_rdr(
         /* Sensor specific information is stored in this structure */
         sensor_info = g_malloc0(sizeof(struct ov_rest_sensor_info));
         if (sensor_info == NULL) {
-                err("ov_rest out of memory");
+                err("OV_REST out of memory");
                 return SA_ERR_HPI_OUT_OF_MEMORY;
         }
         sensor_info->current_state = SAHPI_ES_UNSPECIFIED;
@@ -5518,7 +6658,8 @@ SaErrorT ov_rest_build_server_power_status_rdr(
         rv = oh_add_rdr(oh_handler->rptcache, rpt->ResourceId, &rdr,
                                                         sensor_info, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add server power status rdr for resource id %d",
+							rpt->ResourceId);
                 return rv;
         }
 
@@ -5574,7 +6715,7 @@ SaErrorT ov_rest_build_server_memory_rdr(struct oh_handler_state *oh_handler,
         /* Sensor specific information is stored in this structure */
         sensor_info = g_malloc0(sizeof(struct ov_rest_sensor_info));
         if (sensor_info == NULL) {
-                err("ov_rest out of memory");
+                err("OV_REST out of memory");
                 return SA_ERR_HPI_OUT_OF_MEMORY;
         }
         sensor_info->current_state = SAHPI_ES_UNSPECIFIED;
@@ -5598,7 +6739,8 @@ SaErrorT ov_rest_build_server_memory_rdr(struct oh_handler_state *oh_handler,
         rv = oh_add_rdr(oh_handler->rptcache, rpt->ResourceId, &rdr,
                                                         sensor_info, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add server memory rdr for resource id %d",
+							rpt->ResourceId);
                 return rv;
         }
 
@@ -5654,7 +6796,7 @@ SaErrorT ov_rest_build_server_processor_rdr(struct oh_handler_state
         /* Sensor specific information is stored in this structure */
         sensor_info = g_malloc0(sizeof(struct ov_rest_sensor_info));
         if (sensor_info == NULL) {
-                err("ov_rest out of memory");
+                err("OV_REST out of memory");
                 return SA_ERR_HPI_OUT_OF_MEMORY;
         }
         sensor_info->current_state = SAHPI_ES_UNSPECIFIED;
@@ -5678,7 +6820,8 @@ SaErrorT ov_rest_build_server_processor_rdr(struct oh_handler_state
         rv = oh_add_rdr(oh_handler->rptcache, rpt->ResourceId, &rdr,
                                                         sensor_info, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add server processor rdr for resource id %d",
+							rpt->ResourceId);
                 return rv;
         }
 
@@ -5734,7 +6877,7 @@ SaErrorT ov_rest_build_server_health_rdr(struct oh_handler_state *oh_handler,
         /* Sensor specific information is stored in this structure */
         sensor_info = g_malloc0(sizeof(struct ov_rest_sensor_info));
         if (sensor_info == NULL) {
-                err("ov_rest out of memory");
+                err("OV_REST out of memory");
                 return SA_ERR_HPI_OUT_OF_MEMORY;
         }
         sensor_info->current_state = SAHPI_ES_UNSPECIFIED;
@@ -5758,7 +6901,8 @@ SaErrorT ov_rest_build_server_health_rdr(struct oh_handler_state *oh_handler,
         rv = oh_add_rdr(oh_handler->rptcache, rpt->ResourceId, &rdr,
                                                         sensor_info, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add server health rdr for resource id %d",
+							rpt->ResourceId);
                 return rv;
         }
 
@@ -5814,7 +6958,7 @@ SaErrorT ov_rest_build_server_battery_rdr(struct oh_handler_state *oh_handler,
         /* Sensor specific information is stored in this structure */
         sensor_info = g_malloc0(sizeof(struct ov_rest_sensor_info));
         if (sensor_info == NULL) {
-                err("ov_rest out of memory");
+                err("OV_REST out of memory");
                 return SA_ERR_HPI_OUT_OF_MEMORY;
         }
         sensor_info->current_state = SAHPI_ES_UNSPECIFIED;
@@ -5838,7 +6982,8 @@ SaErrorT ov_rest_build_server_battery_rdr(struct oh_handler_state *oh_handler,
         rv = oh_add_rdr(oh_handler->rptcache, rpt->ResourceId, &rdr,
                                                         sensor_info, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add server battery rdr for resource id %d",
+							rpt->ResourceId);
                 return rv;
         }
 
@@ -5944,7 +7089,7 @@ SaErrorT ov_rest_build_server_storage_rdr(struct oh_handler_state *oh_handler,
         /* Sensor specific information is stored in this structure */
         sensor_info = g_malloc0(sizeof(struct ov_rest_sensor_info));
         if (sensor_info == NULL) {
-                err("ov_rest out of memory");
+                err("OV_REST out of memory");
                 return SA_ERR_HPI_OUT_OF_MEMORY;
         }
         sensor_info->current_state = SAHPI_ES_UNSPECIFIED;
@@ -5968,7 +7113,8 @@ SaErrorT ov_rest_build_server_storage_rdr(struct oh_handler_state *oh_handler,
         rv = oh_add_rdr(oh_handler->rptcache, rpt->ResourceId, &rdr,
                                                         sensor_info, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add server storage rdr for resource id %d",
+						rpt->ResourceId);
                 return rv;
         }
 
@@ -6026,7 +7172,7 @@ SaErrorT ov_rest_build_server_network_adapters_rdr(
         /* Sensor specific information is stored in this structure */
         sensor_info = g_malloc0(sizeof(struct ov_rest_sensor_info));
         if (sensor_info == NULL) {
-                err("ov_rest out of memory");
+                err("OV_REST out of memory");
                 return SA_ERR_HPI_OUT_OF_MEMORY;
         }
         sensor_info->current_state = SAHPI_ES_UNSPECIFIED;
@@ -6050,7 +7196,8 @@ SaErrorT ov_rest_build_server_network_adapters_rdr(
         rv = oh_add_rdr(oh_handler->rptcache, rpt->ResourceId, &rdr,
                                                         sensor_info, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add server network adapter rdr"
+				" for resource id %d", rpt->ResourceId);
                 return rv;
         }
 
@@ -6108,7 +7255,7 @@ SaErrorT ov_rest_build_server_ethernet_inetrfaces_rdr(
         /* Sensor specific information is stored in this structure */
         sensor_info = g_malloc0(sizeof(struct ov_rest_sensor_info));
         if (sensor_info == NULL) {
-                err("ov_rest out of memory");
+                err("OV_REST out of memory");
                 return SA_ERR_HPI_OUT_OF_MEMORY;
         }
         sensor_info->current_state = SAHPI_ES_UNSPECIFIED;
@@ -6132,7 +7279,8 @@ SaErrorT ov_rest_build_server_ethernet_inetrfaces_rdr(
         rv = oh_add_rdr(oh_handler->rptcache, rpt->ResourceId, &rdr,
                                                         sensor_info, 0);
         if (rv != SA_OK) {
-                err("Failed to add rdr");
+                err("Failed to add server ethernet interface rdr"
+			" for resource id %d", rpt->ResourceId);
                 return rv;
         }
 
@@ -6269,7 +7417,7 @@ static void ov_rest_push_disc_res(struct oh_handler_state *oh_handler)
 {
 	SaHpiRptEntryT *rpt = NULL;
 	struct oh_event event = {0};
-	struct ov_rest_hotswap_state *hotswap_state = NULL;
+	struct ovRestHotswapState *hotswap_state = NULL;
 	GSList *assert_sensor_list = NULL;
 
 	if (oh_handler == NULL) {
@@ -6292,11 +7440,12 @@ static void ov_rest_push_disc_res(struct oh_handler_state *oh_handler)
 			/* Get the hotswap state and fill the current
 			 * hotswap state
 			 */
-			hotswap_state = (struct ov_rest_hotswap_state *)
+			hotswap_state = (struct ovRestHotswapState *)
 				oh_get_resource_data(oh_handler->rptcache,
 						event.resource.ResourceId);
 			if (hotswap_state == NULL) {
-				err("Failed to get server hotswap state");
+				err("Failed to get server hotswap state for "
+					"resource id %d", rpt->ResourceId);
 				return;
 			}
 			event.event.EventType = SAHPI_ET_HOTSWAP;

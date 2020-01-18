@@ -73,13 +73,15 @@ SaErrorT ov_rest_build_enclosure_inv_rdr(struct oh_handler_state *oh_handler,
 	SaHpiIdrFieldT hpi_field = {0};
 	char enclosure_inv_str[] = ENCLOSURE_INVENTORY_STRING, *tmp = NULL;
 	struct ov_rest_inventory *local_inventory = NULL;
-	struct ov_rest_area *head_area = NULL;
+	struct ovRestArea *head_area = NULL;
 	SaHpiInt32T add_success_flag = 0;
 	SaHpiInt32T product_area_success_flag = 0;
 	SaHpiInt32T area_count = 0;
 	struct ov_rest_handler *ov_handler = NULL;
 	SaHpiResourceIdT resource_id;
 	SaHpiRptEntryT *rpt = NULL;
+	SaHpiFloat64T fm_version;
+	SaHpiInt32T major;
 
 	if (oh_handler == NULL || response == NULL || rdr == NULL ||
 			inventory == NULL) {
@@ -92,7 +94,8 @@ SaErrorT ov_rest_build_enclosure_inv_rdr(struct oh_handler_state *oh_handler,
 	/* Get the rpt entry of the resource */
 	rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
 	if (rpt == NULL) {
-		err("resource RPT is NULL");
+		err("RPT is NULL for the enclosure id %d",
+							resource_id);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 
@@ -135,7 +138,8 @@ SaErrorT ov_rest_build_enclosure_inv_rdr(struct oh_handler_state *oh_handler,
 			response->manufacturer,
 			&add_success_flag);
 	if (rv != SA_OK) {
-		err("Add product area failed");
+		err("Add product area failed for the enclosure id %d",
+							resource_id);
 		return rv;
 	}
 
@@ -160,7 +164,8 @@ SaErrorT ov_rest_build_enclosure_inv_rdr(struct oh_handler_state *oh_handler,
 			response->serialNumber,
 			&add_success_flag);
 	if (rv != SA_OK) {
-		err("Add chassis area failed");
+		err("Add chassis area failed for the enclosure id %d",
+						resource_id);
 		return rv;
 	}
 	if (add_success_flag != SAHPI_FALSE) {
@@ -192,20 +197,34 @@ SaErrorT ov_rest_build_enclosure_inv_rdr(struct oh_handler_state *oh_handler,
 						local_inventory->info.area_list->field_list),
 					&hpi_field);
 			if (rv != SA_OK) {
-				err("Add idr field failed");
+				err("Add idr field hwVersion failed for the"
+					" enclosure id %d", resource_id);
 				return rv;
 			}
 
 			/* Increment the field counter */
 			local_inventory->info.area_list->idr_area_head.
 				NumFields++;
+			
+			/* Check whether Firmware version is NULL. */
+			if (!response->hwVersion) {
+				err("Firmware version is not vailable for the"
+					"resource %d", resource_id);
+				return SA_ERR_HPI_INTERNAL_ERROR;
+			}
+			/* Store Firmware MajorRev & MinorRev data in rpt */
+			fm_version = atof(response->hwVersion);
+			rpt->ResourceInfo.FirmwareMajorRev = major =
+					(SaHpiUint8T)floor(fm_version);
+			rpt->ResourceInfo.FirmwareMinorRev = rintf((
+					fm_version - major) * 100);
 		}
 
 		if (response->uri != NULL) {
 			hpi_field.AreaId = local_inventory->info.area_list->
 				idr_area_head.AreaId;
 			hpi_field.Type = SAHPI_IDR_FIELDTYPE_CUSTOM;
-			rv = asprintf(&tmp,"URI = %s",response->uri);
+			WRAP_ASPRINTF(&tmp,"URI = %s",response->uri);
 			strcpy ((char *)hpi_field.Field.Data, tmp);
 			wrap_free(tmp);
 
@@ -213,7 +232,8 @@ SaErrorT ov_rest_build_enclosure_inv_rdr(struct oh_handler_state *oh_handler,
 						local_inventory->info.area_list->field_list),
 					&hpi_field);
 			if (rv != SA_OK) {
-				err("Add idr field failed");
+				err("Add idr field uri failed for the"
+					" enclosure id %d", resource_id);
 				return rv;
 			}
 
@@ -259,7 +279,7 @@ SaErrorT ov_rest_build_server_inv_rdr(struct oh_handler_state *oh_handler,
 	SaHpiIdrFieldT hpi_field = {0};
 	char server_inv_str[] = SERVER_INVENTORY_STRING, *tmp = NULL;
 	struct ov_rest_inventory *local_inventory = NULL;
-	struct ov_rest_area *head_area = NULL;
+	struct ovRestArea *head_area = NULL;
 	SaHpiInt32T add_success_flag = 0;
 	SaHpiInt32T product_area_success_flag = 0;
 	SaHpiInt32T area_count = 0;
@@ -275,7 +295,8 @@ SaErrorT ov_rest_build_server_inv_rdr(struct oh_handler_state *oh_handler,
 
 	rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
 	if (!rpt) {
-		err("Could not find blade resource rpt");
+		err("Could not find blade resource rpt for resource id %d",
+							resource_id);
 		return(SA_ERR_HPI_INTERNAL_ERROR);
 	}
 	rdr->Entity = rpt->ResourceEntity;
@@ -319,7 +340,8 @@ SaErrorT ov_rest_build_server_inv_rdr(struct oh_handler_state *oh_handler,
 			response->manufacturer,
 			&add_success_flag);
 	if (rv != SA_OK) {
-		err("Add product area failed");
+		err("Add product area failed for the server id %d",
+							resource_id);
 		return rv;
 	}
 
@@ -344,7 +366,7 @@ SaErrorT ov_rest_build_server_inv_rdr(struct oh_handler_state *oh_handler,
 			response->serialNumber,
 			&add_success_flag);
 	if (rv != SA_OK) {
-		err("Add board area failed");
+		err("Add board area failed for the server id %d", resource_id);
 		return rv;
 	}
 	if (add_success_flag != SAHPI_FALSE) {
@@ -376,7 +398,8 @@ SaErrorT ov_rest_build_server_inv_rdr(struct oh_handler_state *oh_handler,
 						local_inventory->info.area_list->field_list),
 					&hpi_field);
 			if (rv != SA_OK) {
-				err("Add idr field failed");
+				err("Add idr field fwVersion failed for"
+					" server id %d", resource_id);
 				return rv;
 			}
 
@@ -384,6 +407,12 @@ SaErrorT ov_rest_build_server_inv_rdr(struct oh_handler_state *oh_handler,
 			local_inventory->info.area_list->idr_area_head.
 				NumFields++;
 
+			/* Check whether Firmware version is NULL. */
+			if (!response->fwVersion) {
+				err("Firmware version is not vailable for the"
+					"resource %d", resource_id);
+				return SA_ERR_HPI_INTERNAL_ERROR;
+			}
 			/* Store Firmware MajorRev & MinorRev data in rpt */
 			fm_version = atof(response->fwVersion);
 			rpt->ResourceInfo.FirmwareMajorRev = major =
@@ -395,7 +424,7 @@ SaErrorT ov_rest_build_server_inv_rdr(struct oh_handler_state *oh_handler,
 			hpi_field.AreaId = local_inventory->info.area_list->
 				idr_area_head.AreaId;
 			hpi_field.Type = SAHPI_IDR_FIELDTYPE_CUSTOM;
-			rv = asprintf(&tmp,"URI = %s",response->uri);
+			WRAP_ASPRINTF(&tmp,"URI = %s",response->uri);
 			strcpy ((char *)hpi_field.Field.Data, tmp);
 			wrap_free(tmp);
 
@@ -403,7 +432,8 @@ SaErrorT ov_rest_build_server_inv_rdr(struct oh_handler_state *oh_handler,
 						local_inventory->info.area_list->field_list),
 					&hpi_field);
 			if (rv != SA_OK) {
-				err("Add idr field failed");
+				err("Add idr field uri failed for the server"
+						"  id %d", resource_id);
 				return rv;
 			}
 
@@ -449,7 +479,7 @@ SaErrorT ov_rest_build_drive_enclosure_inv_rdr(
 	SaHpiIdrFieldT hpi_field = {0};
 	char server_inv_str[] = SERVER_INVENTORY_STRING, *tmp = NULL;
 	struct ov_rest_inventory *local_inventory = NULL;
-	struct ov_rest_area *head_area = NULL;
+	struct ovRestArea *head_area = NULL;
 	SaHpiInt32T add_success_flag = 0;
 	SaHpiInt32T product_area_success_flag = 0;
 	SaHpiInt32T area_count = 0;
@@ -465,7 +495,8 @@ SaErrorT ov_rest_build_drive_enclosure_inv_rdr(
 
 	rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
 	if (!rpt) {
-		err("Could not find Drive Enclosure resource rpt");
+		err("Could not find Drive Enclosure resource rpt for"
+				" resource id %d", resource_id);
 		return(SA_ERR_HPI_INTERNAL_ERROR);
 	}
 	rdr->Entity = rpt->ResourceEntity;
@@ -513,7 +544,8 @@ SaErrorT ov_rest_build_drive_enclosure_inv_rdr(
 			response->manufacturer,
 			&add_success_flag);
 	if (rv != SA_OK) {
-		err("Add product area failed");
+		err("Add product area failed for drive enclosure id %d",
+							resource_id);
 		wrap_g_free(local_inventory);
 		wrap_g_free(local_inventory->comment);
 		return rv;
@@ -540,7 +572,8 @@ SaErrorT ov_rest_build_drive_enclosure_inv_rdr(
 			response->serialNumber,
 			&add_success_flag);
 	if (rv != SA_OK) {
-		err("Add board area failed");
+		err("Add board area failed for drive enclosure id %d",
+							resource_id);
 		wrap_g_free(local_inventory);
 		wrap_g_free(local_inventory->comment);
 		return rv;
@@ -575,7 +608,9 @@ SaErrorT ov_rest_build_drive_enclosure_inv_rdr(
 						->field_list),
 					&hpi_field);
 			if (rv != SA_OK) {
-				err("Add idr field failed");
+				err("Add idr field fwVersion failed"
+					" for drive enclosure id %d",
+						resource_id);
 				wrap_g_free(local_inventory);
 				wrap_g_free(local_inventory->comment);
 				return rv;
@@ -585,6 +620,12 @@ SaErrorT ov_rest_build_drive_enclosure_inv_rdr(
 			local_inventory->info.area_list->idr_area_head.
 				NumFields++;
 
+			/* Check whether Firmware version is NULL. */
+			if (!response->fwVersion) {
+				err("Firmware version is not vailable for the"
+					"resource %d", resource_id);
+				return SA_ERR_HPI_INTERNAL_ERROR;
+			}
 			/* Store Firmware MajorRev & MinorRev data in rpt */
 			fm_version = atof(response->fwVersion);
 			rpt->ResourceInfo.FirmwareMajorRev = major =
@@ -596,7 +637,7 @@ SaErrorT ov_rest_build_drive_enclosure_inv_rdr(
 			hpi_field.AreaId = local_inventory->info.area_list->
 				idr_area_head.AreaId;
 			hpi_field.Type = SAHPI_IDR_FIELDTYPE_CUSTOM;
-			rv = asprintf(&tmp,"URI = %s",response->uri);
+			WRAP_ASPRINTF(&tmp,"URI = %s",response->uri);
 			strcpy ((char *)hpi_field.Field.Data, tmp);
 			wrap_free(tmp);
 
@@ -605,7 +646,8 @@ SaErrorT ov_rest_build_drive_enclosure_inv_rdr(
 						->field_list),
 					&hpi_field);
 			if (rv != SA_OK) {
-				err("Add idr field failed");
+				err("Add idr field uri failed for drive "
+					"enclosure id %d", resource_id);
 				return rv;
 			}
 
@@ -650,7 +692,7 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
 	char interconnect_inv_str[] = INTERCONNECT_INVENTORY_STRING, 
 	     *tmp = NULL;
 	struct ov_rest_inventory *local_inventory = NULL;
-	struct ov_rest_area *head_area = NULL;
+	struct ovRestArea *head_area = NULL;
 	SaHpiInt32T add_success_flag = 0;
 	SaHpiInt32T product_area_success_flag = 0;
 	SaHpiInt32T area_count = 0;
@@ -666,7 +708,8 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
 	/* Get the rpt entry of the resource */
 	rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
 	if (rpt == NULL) {
-		err("resource RPT is NULL");
+		err("RPT is NULL for interconnect in bay %d of resource id %d",
+					response->bayNumber, resource_id);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 
@@ -717,7 +760,8 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
 				&add_success_flag);
 
 	if (rv != SA_OK) {
-		err("Add product area failed");
+		err("Add product area failed for interconnect id %d",
+							resource_id);
 		return rv;
 	}
 
@@ -742,7 +786,8 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
 			response->serialNumber,
 			&add_success_flag);
 	if (rv != SA_OK) {
-		err("Add board area failed");
+		err("Add board area failed for interconnect id %d",
+							resource_id);
 		return rv;
 	}
 	if (add_success_flag != SAHPI_FALSE) {
@@ -766,14 +811,15 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
 			hpi_field.AreaId = local_inventory->info.area_list->
 				idr_area_head.AreaId;
 			hpi_field.Type = SAHPI_IDR_FIELDTYPE_CUSTOM;
-			rv = asprintf(&tmp,"URI = %s",response->uri);
+			WRAP_ASPRINTF(&tmp,"URI = %s",response->uri);
 			strcpy ((char *)hpi_field.Field.Data, tmp);
 			wrap_free(tmp);
 			rv = ov_rest_idr_field_add(&(
 						local_inventory->info.area_list->field_list),
 					&hpi_field);
 			if (rv != SA_OK) {
-				err("Add idr field failed");
+				err("Add idr field uri failed for interconnect"
+					" id %d", resource_id);
 				return rv;
 			}
 
@@ -808,16 +854,16 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
  *      SA_ERR_HPI_INVALID_PARAMS - On wrong parameters
  *      SA_ERR_HPI_OUT_OF_MEMORY - Request failed due to insufficient memory
  **/
-SaErrorT ov_rest_add_product_area(struct ov_rest_area **area,
+SaErrorT ov_rest_add_product_area(struct ovRestArea **area,
                           char *name,
                           char *manufacturer,
                           SaHpiInt32T *success_flag)
 {
 	SaErrorT rv = SA_OK;
 	SaHpiIdrFieldT hpi_field = {0};
-	struct ov_rest_area *local_area = NULL;
-	struct ov_rest_field *field = NULL;
-	struct ov_rest_field *head_field = NULL;
+	struct ovRestArea *local_area = NULL;
+	struct ovRestField *field = NULL;
+	struct ovRestField *head_field = NULL;
 	SaHpiInt32T field_count = 0;
 
 	if (area == NULL || success_flag == NULL) {
@@ -841,7 +887,7 @@ SaErrorT ov_rest_add_product_area(struct ov_rest_area **area,
 			SAHPI_IDR_AREATYPE_PRODUCT_INFO,
 			&local_area);
 	if (rv != SA_OK) {
-		err("Add idr area failed");
+		err("Add idr area failed for %s", name);
 		return rv;
 	}
 	*success_flag = SAHPI_TRUE;
@@ -857,7 +903,7 @@ SaErrorT ov_rest_add_product_area(struct ov_rest_area **area,
 		rv = ov_rest_idr_field_add(&(local_area->field_list),
 				&hpi_field);
 		if (rv != SA_OK) {
-			err("Add idr field failed");
+			err("Add idr field failed for %s", name);
 			return rv;
 		}
 		++field_count;
@@ -881,7 +927,7 @@ SaErrorT ov_rest_add_product_area(struct ov_rest_area **area,
 		rv = ov_rest_idr_field_add(&(local_area->field_list),
 				&hpi_field);
 		if (rv != SA_OK) {
-			err("Add idr field failed");
+			err("Add idr field failed for %s", name);
 			return rv;
 		}
 		++field_count;
@@ -898,8 +944,8 @@ SaErrorT ov_rest_add_product_area(struct ov_rest_area **area,
 /**
  * ov_rest_add_chassis_area
  *      @area: IDR area pointer
- *      @part_number: Resource part number
- *      @serial_number: Resource serial_number
+ *      @partNumber: Resource part number
+ *      @serialNumber: Resource serialNumber
  *      @success_flag: Flag for checking area creation
  *
  * Purpose:
@@ -917,16 +963,16 @@ SaErrorT ov_rest_add_product_area(struct ov_rest_area **area,
  *      SA_ERR_HPI_INVALID_PARAMS - On wrong parameters
  *      SA_ERR_HPI_OUT_OF_MEMORY - Request failed due to insufficient memory
  **/
-SaErrorT ov_rest_add_chassis_area(struct ov_rest_area **area,
-                          char *part_number,
-                          char *serial_number,
+SaErrorT ov_rest_add_chassis_area(struct ovRestArea **area,
+                          char *partNumber,
+                          char *serialNumber,
                           SaHpiInt32T *success_flag)
 {
 	SaErrorT rv = SA_OK;
 	SaHpiIdrFieldT hpi_field = {0};
-	struct ov_rest_area *local_area = NULL;
-	struct ov_rest_field *field = NULL;
-	struct ov_rest_field *head_field = NULL;
+	struct ovRestArea *local_area = NULL;
+	struct ovRestField *field = NULL;
+	struct ovRestField *head_field = NULL;
 	SaHpiInt32T field_count = 0;
 
 	if (area == NULL || success_flag == NULL) {
@@ -937,7 +983,7 @@ SaErrorT ov_rest_add_chassis_area(struct ov_rest_area **area,
 	/* If both part number and serial number information is NULL
          * then chassis area is not created
          */
-	if (part_number == NULL && serial_number == NULL) {
+	if (partNumber == NULL && serialNumber == NULL) {
 		err("Chassis Area:Required information not available");
 		err("Chassis area not created");
 		*success_flag = SAHPI_FALSE;
@@ -949,7 +995,8 @@ SaErrorT ov_rest_add_chassis_area(struct ov_rest_area **area,
 			&local_area);
 
 	if (rv != SA_OK) {
-		err("Add idr area failed");
+		err("Add idr area failed for resource with serialNumber %s",
+						serialNumber);
 		return rv;
 	}
 	field_count = 0;
@@ -957,16 +1004,18 @@ SaErrorT ov_rest_add_chassis_area(struct ov_rest_area **area,
 
 	/* Add the fields to the newly created chassis area */
 	field = local_area->field_list;
-	if (part_number != NULL) {
+	if (partNumber != NULL) {
 
 		hpi_field.AreaId = local_area->idr_area_head.AreaId;
 		hpi_field.Type = SAHPI_IDR_FIELDTYPE_PART_NUMBER;
-		strcpy ((char *)hpi_field.Field.Data, part_number);
+		strcpy ((char *)hpi_field.Field.Data, partNumber);
 
 		rv = ov_rest_idr_field_add(&(local_area->field_list),
 				&hpi_field);
 		if (rv != SA_OK) {
-			err("Add idr field failed");
+			err("Add idr field partNumber failed for"
+				" resource with serialNumber %s", 
+					serialNumber);
 			return rv;
 		}
 		++field_count;
@@ -975,16 +1024,18 @@ SaErrorT ov_rest_add_chassis_area(struct ov_rest_area **area,
 		}
 		local_area->idr_area_head.NumFields++;
 	}
-	if (serial_number != NULL) {
+	if (serialNumber != NULL) {
 
 		hpi_field.AreaId = local_area->idr_area_head.AreaId;
 		hpi_field.Type = SAHPI_IDR_FIELDTYPE_SERIAL_NUMBER;
-		strcpy ((char *)hpi_field.Field.Data, serial_number);
+		strcpy ((char *)hpi_field.Field.Data, serialNumber);
 
 		rv = ov_rest_idr_field_add(&(local_area->field_list),
 				&hpi_field);
 		if (rv != SA_OK) {
-			err("Add idr field failed");
+			err("Add idr field serialNumber failed for"
+				" resource with serialNumber %s",
+					serialNumber);
 			return rv;
 		}
 		++field_count;
@@ -1001,8 +1052,8 @@ SaErrorT ov_rest_add_chassis_area(struct ov_rest_area **area,
 /**
  * ov_rest_add_board_area
  *      @area: IDR area pointer
- *      @part_number: Resource part number
- *      @serial_number: Resource serial_number
+ *      @partNumber: Resource part number
+ *      @serialNumber: Resource serialNumber
  *      @success_flag: Flag for checking area creation
  *
  * Purpose:
@@ -1020,16 +1071,16 @@ SaErrorT ov_rest_add_chassis_area(struct ov_rest_area **area,
  *      SA_ERR_HPI_INVALID_PARAMS - On wrong parameters
  *      SA_ERR_HPI_OUT_OF_MEMORY - Request failed due to insufficient memory
  **/
-SaErrorT ov_rest_add_board_area(struct ov_rest_area **area,
-                        char *part_number,
-                        char *serial_number,
+SaErrorT ov_rest_add_board_area(struct ovRestArea **area,
+                        char *partNumber,
+                        char *serialNumber,
                         SaHpiInt32T *success_flag)
 {
 	SaErrorT rv = SA_OK;
 	SaHpiIdrFieldT hpi_field = {0};
-	struct ov_rest_area *local_area = NULL;
-	struct ov_rest_field *field = NULL;
-	struct ov_rest_field *head_field = NULL;
+	struct ovRestArea *local_area = NULL;
+	struct ovRestField *field = NULL;
+	struct ovRestField *head_field = NULL;
 	SaHpiInt32T field_count = 0;
 
 	if (area == NULL || success_flag == NULL) {
@@ -1040,8 +1091,8 @@ SaErrorT ov_rest_add_board_area(struct ov_rest_area **area,
 	/* If both part number and serial number information is NULL
          * then board area is not created
          */
-	if ((part_number == NULL && serial_number == NULL) &&
-			(part_number[0] == '\0' && serial_number[0] == '\0')) {
+	if ((partNumber == NULL && serialNumber == NULL) &&
+			(partNumber[0] == '\0' && serialNumber[0] == '\0')) {
 		err("Board Area:Required information not available");
 		err("Board area not created");
 		*success_flag = SAHPI_FALSE;
@@ -1052,7 +1103,8 @@ SaErrorT ov_rest_add_board_area(struct ov_rest_area **area,
 			SAHPI_IDR_AREATYPE_BOARD_INFO,
 			&local_area);
 	if (rv != SA_OK) {
-		err("Add idr area failed");
+		err("Add idr area failed for resource with serialNumber %s",
+					serialNumber);
 		return rv;
 	}
 	*success_flag = SAHPI_TRUE;
@@ -1061,16 +1113,18 @@ SaErrorT ov_rest_add_board_area(struct ov_rest_area **area,
 
 	/* Add the fields to the newly created product area */
 	field = local_area->field_list;
-	if (part_number != NULL && part_number[0] != '\0') {
+	if (partNumber != NULL && partNumber[0] != '\0') {
 
 		hpi_field.AreaId = local_area->idr_area_head.AreaId;
 		hpi_field.Type = SAHPI_IDR_FIELDTYPE_PART_NUMBER;
-		strcpy ((char *)hpi_field.Field.Data, part_number);
+		strcpy ((char *)hpi_field.Field.Data, partNumber);
 
 		rv = ov_rest_idr_field_add(&(local_area->field_list),
 				&hpi_field);
 		if (rv != SA_OK) {
-			err("Add idr field failed");
+			err("Add idr field partNumber failed for"
+				" resource with serialNumber %s",
+					serialNumber);
 			return rv;
 		}
 		++field_count;
@@ -1079,15 +1133,17 @@ SaErrorT ov_rest_add_board_area(struct ov_rest_area **area,
 		}
 		local_area->idr_area_head.NumFields++;
 	}
-	if (serial_number != NULL && serial_number[0] != '\0') {
+	if (serialNumber != NULL && serialNumber[0] != '\0') {
 		hpi_field.AreaId = local_area->idr_area_head.AreaId;
 		hpi_field.Type = SAHPI_IDR_FIELDTYPE_SERIAL_NUMBER;
-		strcpy ((char *)hpi_field.Field.Data, serial_number);
+		strcpy ((char *)hpi_field.Field.Data, serialNumber);
 
 		rv = ov_rest_idr_field_add(&(local_area->field_list),
 				&hpi_field);
 		if (rv != SA_OK) {
-			err("Add idr field failed");
+			err("Add idr field serialNumber failed for"
+				" resource with serialNumber %s",
+					serialNumber);
 			return rv;
 		}
 		++field_count;
@@ -1105,8 +1161,8 @@ SaErrorT ov_rest_add_board_area(struct ov_rest_area **area,
  *      @area: IDR area pointer
  *      @manufacturer: Resource manufacturer
  *      @name: Resource name
- *      @part_number: Resource part number
- *      @serial_number: Resource serial_number
+ *      @partNumber: Resource part number
+ *      @serialNumber: Resource serialNumber
  *      @success_flag: Flag for checking area creation
  *
  * Purpose:
@@ -1124,18 +1180,18 @@ SaErrorT ov_rest_add_board_area(struct ov_rest_area **area,
  *      SA_ERR_HPI_INVALID_PARAMS - On wrong parameters
  *      SA_ERR_HPI_OUT_OF_MEMORY - Request failed due to insufficient memory
  */
-SaErrorT ov_rest_add_internal_area(struct ov_rest_area **area,
+SaErrorT ov_rest_add_internal_area(struct ovRestArea **area,
                            char *manufacturer,
                            char *name,
-                           char *part_number,
-                           char *serial_number,
+                           char *partNumber,
+                           char *serialNumber,
                            SaHpiInt32T *success_flag)
 {
 	SaErrorT rv = SA_OK;
 	SaHpiIdrFieldT hpi_field = {0};
-	struct ov_rest_area *local_area = NULL;
-	struct ov_rest_field *field = NULL;
-	struct ov_rest_field *head_field = NULL;
+	struct ovRestArea *local_area = NULL;
+	struct ovRestField *field = NULL;
+	struct ovRestField *head_field = NULL;
 	SaHpiInt32T field_count = 0;
 
 	if (area == NULL || success_flag == NULL) {
@@ -1147,7 +1203,7 @@ SaErrorT ov_rest_add_internal_area(struct ov_rest_area **area,
          * area is not created
          */
 	if (manufacturer == NULL && name == NULL &&
-			part_number == NULL && serial_number == NULL) {
+			partNumber == NULL && serialNumber == NULL) {
 		err("Internal Area:Required information not available");
 		err("Internal area not created");
 		*success_flag = SAHPI_FALSE;
@@ -1159,7 +1215,8 @@ SaErrorT ov_rest_add_internal_area(struct ov_rest_area **area,
 			(SaHpiIdrAreaTypeT)SAHPI_IDR_AREATYPE_INTERNAL_USE,
 			&local_area);
 	if (rv != SA_OK) {
-		err("Add idr area failed");
+		err("Add idr area failed for %s with serialNumber %s",
+					name, serialNumber);
 		return rv;
 	}
 
@@ -1175,7 +1232,9 @@ SaErrorT ov_rest_add_internal_area(struct ov_rest_area **area,
 		rv = ov_rest_idr_field_add(&(local_area->field_list),
 				&hpi_field);
 		if (rv != SA_OK) {
-			err("Add idr field failed");
+			err("Add idr field manufacturer failed for"
+				" %s with serialNumber %s",
+					name, serialNumber);
 			return rv;
 		}
 		++field_count;
@@ -1193,7 +1252,9 @@ SaErrorT ov_rest_add_internal_area(struct ov_rest_area **area,
 		rv = ov_rest_idr_field_add(&(local_area->field_list),
 				&hpi_field);
 		if (rv != SA_OK) {
-			err("Add idr field failed");
+			err("Add idr field name failed for"
+				" %s with serialNumber %s",
+					name, serialNumber);
 			return rv;
 		}
 		++field_count;
@@ -1203,15 +1264,17 @@ SaErrorT ov_rest_add_internal_area(struct ov_rest_area **area,
 		local_area->idr_area_head.NumFields++;
 	}
 
-	if (part_number != NULL) {
+	if (partNumber != NULL) {
 		hpi_field.AreaId = local_area->idr_area_head.AreaId;
 		hpi_field.Type = SAHPI_IDR_FIELDTYPE_PART_NUMBER;
-		strcpy ((char *)hpi_field.Field.Data, part_number);
+		strcpy ((char *)hpi_field.Field.Data, partNumber);
 
 		rv = ov_rest_idr_field_add(&(local_area->field_list),
 				&hpi_field);
 		if (rv != SA_OK) {
-			err("Add idr field failed");
+			err("Add idr field partNumber failed for"
+				" %s with serialNumber %s",
+					name, serialNumber);
 			return rv;
 		}
 		++field_count;
@@ -1222,15 +1285,17 @@ SaErrorT ov_rest_add_internal_area(struct ov_rest_area **area,
 		local_area->idr_area_head.NumFields++;
 	}
 
-	if (serial_number != NULL) {
+	if (serialNumber != NULL) {
 		hpi_field.AreaId = local_area->idr_area_head.AreaId;
 		hpi_field.Type = SAHPI_IDR_FIELDTYPE_SERIAL_NUMBER;
-		strcpy ((char *)hpi_field.Field.Data, serial_number);
+		strcpy ((char *)hpi_field.Field.Data, serialNumber);
 
 		rv = ov_rest_idr_field_add(&(local_area->field_list),
 				&hpi_field);
 		if (rv != SA_OK) {
-			err("Add idr field failed");
+			err("Add idr field serialNumber failed for"
+				" %s with serialNumber %s",
+					name, serialNumber);
 			return rv;
 		}
 		++field_count;
@@ -1267,11 +1332,11 @@ SaErrorT ov_rest_add_internal_area(struct ov_rest_area **area,
 *      SA_ERR_HPI_INVALID_PARAMS - On wrong parameters
 *      SA_ERR_HPI_OUT_OF_MEMORY - Request failed due to insufficient memory
 */
-SaErrorT ov_rest_idr_area_add(struct ov_rest_area **head_area,
+SaErrorT ov_rest_idr_area_add(struct ovRestArea **head_area,
                       SaHpiIdrAreaTypeT area_type,
-                      struct ov_rest_area **area)
+                      struct ovRestArea **area)
 {
-	struct ov_rest_area *local_area = NULL;
+	struct ovRestArea *local_area = NULL;
 	SaHpiEntryIdT local_area_id;
 
 	if (head_area == NULL || area == NULL) {
@@ -1282,8 +1347,8 @@ SaErrorT ov_rest_idr_area_add(struct ov_rest_area **head_area,
 	local_area = *head_area;
 	/* Check whether the area list is empty */
 	if (local_area == NULL) {
-		local_area = (struct ov_rest_area*)
-			g_malloc0(sizeof(struct ov_rest_area));
+		local_area = (struct ovRestArea*)
+			g_malloc0(sizeof(struct ovRestArea));
 		if (!local_area) {
 			err("OV REST out of memory");
 			return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -1300,8 +1365,8 @@ SaErrorT ov_rest_idr_area_add(struct ov_rest_area **head_area,
 		while (local_area->next_area != NULL) {
 			local_area = local_area->next_area;
 		}
-		local_area->next_area = (struct ov_rest_area*)
-			g_malloc0(sizeof(struct ov_rest_area));
+		local_area->next_area = (struct ovRestArea*)
+			g_malloc0(sizeof(struct ovRestArea));
 		if (!local_area->next_area) {
 			err("OV REST out of memory");
 			return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -1344,12 +1409,12 @@ SaErrorT ov_rest_idr_area_add(struct ov_rest_area **head_area,
  *      SA_ERR_HPI_NOT_PRESENT - Requested object not present
  *      SA_ERR_HPI_OUT_OF_MEMORY - Request failed due to insufficient memory
  **/
-SaErrorT ov_rest_idr_area_add_by_id(struct ov_rest_area **head_area,
+SaErrorT ov_rest_idr_area_add_by_id(struct ovRestArea **head_area,
                             SaHpiIdrAreaTypeT area_type,
                             SaHpiEntryIdT area_id)
 {
-        struct ov_rest_area *local_area = NULL;
-        struct ov_rest_area *temp_area = NULL;
+        struct ovRestArea *local_area = NULL;
+        struct ovRestArea *temp_area = NULL;
 
         if (head_area == NULL || area_id == SAHPI_LAST_ENTRY) {
                 err("Invalid parameter.");
@@ -1357,8 +1422,8 @@ SaErrorT ov_rest_idr_area_add_by_id(struct ov_rest_area **head_area,
         }
 
         temp_area = *head_area;
-        local_area = (struct ov_rest_area*)g_malloc0(
-                      sizeof(struct ov_rest_area));
+        local_area = (struct ovRestArea*)g_malloc0(
+                      sizeof(struct ovRestArea));
         if (!local_area) {
                err("OV REST out of memory");
                return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -1424,11 +1489,11 @@ SaErrorT ov_rest_idr_area_add_by_id(struct ov_rest_area **head_area,
  *      SA_ERR_HPI_NOT_PRESENT - Requested object not present
  *      SA_ERR_HPI_OUT_OF_MEMORY - Request failed due to insufficient memory
  **/
-SaErrorT  ov_rest_idr_field_add(struct ov_rest_field **ov_field,
+SaErrorT  ov_rest_idr_field_add(struct ovRestField **ov_field,
                         SaHpiIdrFieldT *hpi_field)
 {
 	SaHpiEntryIdT field_id;
-	struct ov_rest_field *field = NULL;
+	struct ovRestField *field = NULL;
 
 	if (ov_field == NULL || hpi_field == NULL) {
 		err("Invalid parameter.");
@@ -1441,8 +1506,8 @@ SaErrorT  ov_rest_idr_field_add(struct ov_rest_field **ov_field,
 		/* Create the area and make it as head node(first area) in
 		 * the area list
 		 */
-		field = (struct ov_rest_field*)
-			g_malloc0(sizeof(struct ov_rest_field));
+		field = (struct ovRestField*)
+			g_malloc0(sizeof(struct ovRestField));
 		if (! (field)) {
 			err("OV REST out of memory");
 			return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -1456,8 +1521,8 @@ SaErrorT  ov_rest_idr_field_add(struct ov_rest_field **ov_field,
 		while (field->next_field != NULL) {
 			field = field->next_field;
 		}
-		field->next_field = (struct ov_rest_field*)
-			g_malloc0(sizeof(struct ov_rest_field));
+		field->next_field = (struct ovRestField*)
+			g_malloc0(sizeof(struct ovRestField));
 		if (!(field->next_field)) {
 			return SA_ERR_HPI_OUT_OF_MEMORY;
 		}
@@ -1521,7 +1586,7 @@ SaErrorT ov_rest_fetch_idr_area_header(struct ov_rest_inventory_info
 			SaHpiEntryIdT *next_area_id)
 {
         SaHpiInt32T i = 0;;
-        struct ov_rest_area *local_area = NULL;
+        struct ovRestArea *local_area = NULL;
         SaHpiInt32T found = SAHPI_FALSE;
         SaHpiInt32T area_found = SAHPI_FALSE;
 
@@ -1640,7 +1705,7 @@ SaErrorT ov_rest_fetch_idr_area_header(struct ov_rest_inventory_info
  *      SA_ERR_HPI_INVALID_PARAMS - On wrong parameters
  *      SA_ERR_HPI_NOT_PRESENT - Requested object not present
  **/
-SaErrorT ov_rest_idr_field_update(struct ov_rest_field *ov_field,
+SaErrorT ov_rest_idr_field_update(struct ovRestField *ov_field,
                           SaHpiIdrFieldT *field)
 {
 	if (ov_field == NULL) {
@@ -1717,8 +1782,8 @@ SaErrorT ov_rest_fetch_idr_field(struct ov_rest_inventory_info *inventory_info,
                          SaHpiIdrFieldT *field)
 {
 	SaHpiInt32T i = 0;
-	struct ov_rest_area *local_area = NULL;
-	struct ov_rest_field *local_field = NULL;
+	struct ovRestArea *local_area = NULL;
+	struct ovRestField *local_field = NULL;
 	SaHpiInt32T found = SAHPI_FALSE;
 	SaHpiIdrFieldTypeT usf_type = SAHPI_IDR_FIELDTYPE_UNSPECIFIED;
 	SaHpiInt32T fieldFound = SAHPI_FALSE;
@@ -1858,7 +1923,8 @@ SaErrorT ov_rest_free_inventory_info(struct oh_handler_state *handler,
                                  SAHPI_INVENTORY_RDR,
                                  SAHPI_DEFAULT_INVENTORY_ID);
         if (rdr == NULL) {
-                err("Inventory RDR is not found");
+                err("Inventory RDR is not found for resource id %d",
+					resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
@@ -1875,7 +1941,8 @@ SaErrorT ov_rest_free_inventory_info(struct oh_handler_state *handler,
                 rv = ov_rest_idr_area_delete(&(inventory->info.area_list),
                                      area_id);
                 if (rv != SA_OK) {
-                        err("IDR Area delete failed");
+                        err("IDR Area delete failed for resource id %d",
+						resource_id);
                         return rv;
                 }
         }
@@ -1904,13 +1971,13 @@ SaErrorT ov_rest_free_inventory_info(struct oh_handler_state *handler,
  *      SA_ERR_HPI_INVALID_PARAMS - On wrong parameters
  *      SA_ERR_HPI_NOT_PRESENT - Requested object not present
  **/
-SaErrorT ov_rest_idr_area_delete(struct ov_rest_area **head_area,
+SaErrorT ov_rest_idr_area_delete(struct ovRestArea **head_area,
                          SaHpiEntryIdT area_id)
 {
         SaErrorT rv = SA_OK;
-        struct ov_rest_area *local_area = NULL;
-        struct ov_rest_area *tmp_area = NULL;
-        struct ov_rest_area *next_area = NULL;
+        struct ovRestArea *local_area = NULL;
+        struct ovRestArea *tmp_area = NULL;
+        struct ovRestArea *next_area = NULL;
         SaHpiInt32T count = -1;
 
         if (head_area == NULL) {
@@ -2009,14 +2076,14 @@ SaErrorT ov_rest_idr_area_delete(struct ov_rest_area **head_area,
  *      SA_ERR_HPI_INVALID_PARAMS - Input parameters are not valid
  *      SA_ERR_HPI_OUT_OF_MEMORY - Request failed due to insufficient memory
  **/
-SaErrorT ov_rest_idr_field_add_by_id(struct ov_rest_field **head_field,
+SaErrorT ov_rest_idr_field_add_by_id(struct ovRestField **head_field,
                              SaHpiEntryIdT area_id,
                              SaHpiIdrFieldTypeT field_type,
                              char *field_data,
                              SaHpiEntryIdT field_id)
 {
-        struct ov_rest_field *field = NULL;
-        struct ov_rest_field *temp_field = NULL;
+        struct ovRestField *field = NULL;
+        struct ovRestField *temp_field = NULL;
 
         if (head_field == NULL || field_data == NULL ||
             area_id == SAHPI_LAST_ENTRY ||
@@ -2026,7 +2093,7 @@ SaErrorT ov_rest_idr_field_add_by_id(struct ov_rest_field **head_field,
         }
 
         temp_field = *head_field;
-        field = (struct ov_rest_field*)g_malloc0(sizeof(struct ov_rest_field));
+        field = (struct ovRestField*)g_malloc0(sizeof(struct ovRestField));
         if (!(field)) {
                 err("OV REST out of memory");
                 return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2085,10 +2152,10 @@ SaErrorT ov_rest_idr_field_add_by_id(struct ov_rest_field **head_field,
  *      SA_ERR_HPI_INVALID_PARAMS - On wrong parameters
  *      SA_ERR_HPI_NOT_PRESENT - Requested object not present
  **/
-SaErrorT ov_rest_idr_field_delete(struct ov_rest_field **ov_field,
+SaErrorT ov_rest_idr_field_delete(struct ovRestField **ov_field,
                           SaHpiEntryIdT field_id)
 {
-	struct ov_rest_field *field = NULL, *tmp_field = NULL;
+	struct ovRestField *field = NULL, *tmp_field = NULL;
 
 	if (ov_field == NULL) {
 		err("Invalid parameter.");
@@ -2174,11 +2241,12 @@ SaErrorT ov_rest_get_idr_info(void *oh_handler,
 
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (!rpt) {
-                err("INVALID RESOURCE");
+                err("RPT is NULL for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
         if (! (rpt->ResourceCapabilities & SAHPI_CAPABILITY_INVENTORY_DATA)) {
-                err("INVALID RESOURCE CAPABILITY");
+                err("No INVENTORY_DATA Capability for resource id %d",
+						resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
@@ -2187,14 +2255,16 @@ SaErrorT ov_rest_get_idr_info(void *oh_handler,
                                  SAHPI_INVENTORY_RDR,
                                  idr);
         if (rdr == NULL) {
-                err("INVALID RDR NUMBER");
+                err("Failed to get Inventory rdr for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         inventory = (struct ov_rest_inventory *)
                 oh_get_rdr_data(handler->rptcache, resource_id, rdr->RecordId);
         if (inventory == NULL) {
-                err("No inventory data. idr=%s", rdr->IdString.Data);
+                err("No inventory data. idr=%s for resource id %d",
+				rdr->IdString.Data, resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
@@ -2253,12 +2323,12 @@ SaErrorT ov_rest_get_idr_area_header(void *oh_handler,
          */
         type = oh_lookup_idrareatype(area_type);
         if (type == NULL) {
-                err("Invalid area type.");
+                err("Invalid area type for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
 
         if (area_id == SAHPI_LAST_ENTRY) {
-                err("Invalid area id.");
+                err("Invalid area id for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
 
@@ -2266,31 +2336,34 @@ SaErrorT ov_rest_get_idr_area_header(void *oh_handler,
 
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (!rpt) {
-                err("INVALID RESOURCE");
+                err("Failed to get RPT for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
         if (! (rpt->ResourceCapabilities & SAHPI_CAPABILITY_INVENTORY_DATA)) {
-                err("INVALID RESOURCE CAPABILITY");
+                err("No INVENTORY_DATA Capability for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
         rdr = oh_get_rdr_by_type(handler->rptcache, resource_id,
                                  SAHPI_INVENTORY_RDR, idr);
         if (rdr == NULL) {
-                err("INVALID RDR NUMBER");
+                err("Failed to get Inventory rdr for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         inventory = (struct ov_rest_inventory *)
                 oh_get_rdr_data(handler->rptcache, resource_id, rdr->RecordId);
         if (inventory == NULL) {
-                err("No inventory data. idr=%s", rdr->IdString.Data);
+                err("No inventory data. idr=%s for resource id %d",
+				rdr->IdString.Data, resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
          /* Check whether the area list of the resource IDR is empty */
         if (inventory->info.idr_info.NumAreas == 0) {
-                err("IDR Area not present");
+                err("IDR Area not present for resource id %d", resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
@@ -2301,7 +2374,7 @@ SaErrorT ov_rest_get_idr_area_header(void *oh_handler,
         rv = ov_rest_fetch_idr_area_header(&(inventory->info), area_id, 
 			area_type, header, next_area_id);
         if (rv != SA_OK) {
-                err("IDR Area not present");
+                err("IDR Area not present for resource id %d", resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
         return rv;
@@ -2342,7 +2415,7 @@ SaErrorT ov_rest_add_idr_area(void *oh_handler,
         struct oh_handler_state *handler = NULL;
         SaHpiRptEntryT *rpt = NULL;
         SaHpiRdrT *rdr = NULL;
-        struct ov_rest_area *local_area = NULL;
+        struct ovRestArea *local_area = NULL;
         struct ov_rest_inventory *inventory = NULL;
         char *type = NULL;
 
@@ -2356,13 +2429,14 @@ SaErrorT ov_rest_add_idr_area(void *oh_handler,
          */
         type = oh_lookup_idrareatype(area_type);
         if (type == NULL) {
-                err("Invalid area_type.");
+                err("Area_type s NULL for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
 
         /* It is not valid to create the area of UNSPECIFIED type */
         if (area_type == SAHPI_IDR_AREATYPE_UNSPECIFIED) {
-                err("Invalid area_type.");
+                err("Invalid area_type %x for resource id %d",
+				area_type, resource_id);
                 return SA_ERR_HPI_INVALID_DATA;
         }
 
@@ -2370,31 +2444,34 @@ SaErrorT ov_rest_add_idr_area(void *oh_handler,
 
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (!rpt) {
-                err("INVALID RESOURCE");
+                err("Failed to get RPT for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
         if (! (rpt->ResourceCapabilities & SAHPI_CAPABILITY_INVENTORY_DATA)) {
-                err("INVALID RESOURCE CAPABILITY");
+                err("No INVENTORY_DATA Capability for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
         rdr = oh_get_rdr_by_type(handler->rptcache, resource_id,
                                  SAHPI_INVENTORY_RDR, idr);
         if (rdr == NULL) {
-                err("INVALID RDR NUMBER");
+                err("Failed to get Inventory rdr for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         inventory = (struct ov_rest_inventory *)
                 oh_get_rdr_data(handler->rptcache, resource_id, rdr->RecordId);
         if (inventory == NULL) {
-                err("No inventory data. idr=%s", rdr->IdString.Data);
+                err("No inventory data. idr=%s for resource id %d",
+				rdr->IdString.Data, resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         /* Check whether the resource IDR is read only */
         if (inventory->info.idr_info.ReadOnly == SAHPI_TRUE) {
-                err("IDR is read only");
+                err("IDR is read only for resource id %d", resource_id);
                 return SA_ERR_HPI_READ_ONLY;
         }
 
@@ -2402,7 +2479,8 @@ SaErrorT ov_rest_add_idr_area(void *oh_handler,
         rv = ov_rest_idr_area_add(&(inventory->info.area_list), area_type, 
 				&local_area);
         if (rv != SA_OK) {
-                err("Addition of IDR area failed");
+                err("Addition of IDR area failed for resource id %d",
+							resource_id);
                 if (rv == SA_ERR_HPI_OUT_OF_MEMORY) {
                         return SA_ERR_HPI_OUT_OF_SPACE;
                 }
@@ -2470,13 +2548,14 @@ SaErrorT ov_rest_add_idr_area_by_id (void *oh_handler,
          */
         type = oh_lookup_idrareatype(area_type);
         if (type == NULL) {
-                err("Invalid area_type.");
+                err("Area_type is NULL for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
 
         /* It is not valid to create the area of UNSPECIFIED type */
         if (area_type == SAHPI_IDR_AREATYPE_UNSPECIFIED) {
-                err("Invalid area_type.");
+                err("Invalid area_type %x for resource id %d",
+				area_type, resource_id);
                 return SA_ERR_HPI_INVALID_DATA;
         }
 
@@ -2484,18 +2563,20 @@ SaErrorT ov_rest_add_idr_area_by_id (void *oh_handler,
 
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (!rpt) {
-                err("INVALID RESOURCE");
+                err("Failed to get RPT for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
         if (!(rpt->ResourceCapabilities & SAHPI_CAPABILITY_INVENTORY_DATA)) {
-                err("INVALID RESOURCE CAPABILITY");
+                err("No INVENTORY_DATA Capability for resource id %d",
+						resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
         rdr = oh_get_rdr_by_type(handler->rptcache, resource_id,
                                  SAHPI_INVENTORY_RDR, idr);
         if (rdr == NULL) {
-                err("INVALID RDR NUMBER");
+                err("Failed to get Inventory rdr for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
@@ -2504,13 +2585,14 @@ SaErrorT ov_rest_add_idr_area_by_id (void *oh_handler,
                                 resource_id,
                                 rdr->RecordId);
         if (inventory == NULL) {
-                err("No inventory data. idr=%s", rdr->IdString.Data);
+                err("No inventory data. idr=%s for resource id %d",
+				rdr->IdString.Data, resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         /* Check whether the resource IDR is read only */
         if (inventory->info.idr_info.ReadOnly == SAHPI_TRUE) {
-                err("IDR is read only");
+                err("IDR is read only for resource id %d", resource_id);
                 return SA_ERR_HPI_READ_ONLY;
         }
 
@@ -2520,7 +2602,8 @@ SaErrorT ov_rest_add_idr_area_by_id (void *oh_handler,
                                    area_header,
                                    next_area);
         if (rv == SA_OK) {
-                err("AreaId already exists in the IDR");
+                err("AreaId already exists in the IDR for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_DUPLICATE;
         }
 
@@ -2528,7 +2611,8 @@ SaErrorT ov_rest_add_idr_area_by_id (void *oh_handler,
         rv = ov_rest_idr_area_add_by_id(&(inventory->info.area_list),
                                 area_type, area_id);
         if (rv != SA_OK) {
-                err("Addition of IDR area failed");
+                err("Addition of IDR area failed for resource id %d",
+							resource_id);
                 if (rv == SA_ERR_HPI_OUT_OF_MEMORY) {
                         return SA_ERR_HPI_OUT_OF_SPACE;
                 }
@@ -2586,44 +2670,47 @@ SaErrorT ov_rest_del_idr_area(void *oh_handler,
         handler = (struct oh_handler_state *)oh_handler;
 
         if (area_id == SAHPI_LAST_ENTRY) {
-                err("Invalid area id.");
+                err("Invalid area id for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
 
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (!rpt) {
-                err("INVALID RESOURCE");
+                err("Failed to get RPT for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
         if (! (rpt->ResourceCapabilities & SAHPI_CAPABILITY_INVENTORY_DATA)) {
-                err("INVALID RESOURCE CAPABILITY");
+                err("No INVENTORY_DATA Capability for resource id %d",
+						resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
         rdr = oh_get_rdr_by_type(handler->rptcache, resource_id,
                                  SAHPI_INVENTORY_RDR, idr);
         if (rdr == NULL) {
-                err("INVALID RDR NUMBER");
+                err("Failed to get Inventory rdr for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         inventory = (struct ov_rest_inventory *)
                 oh_get_rdr_data(handler->rptcache, resource_id, rdr->RecordId);
         if (inventory == NULL) {
-                err("No inventory data. IdrId=%s", rdr->IdString.Data);
+                err("No inventory data. IdrId=%s for resource id %d",
+				rdr->IdString.Data, resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         /* Check whether the resource IDR is read only */
         if (inventory->info.idr_info.ReadOnly == SAHPI_TRUE) {
-                err("IDR is read only");
+                err("IDR is read only for resource id %d", resource_id);
                 return SA_ERR_HPI_READ_ONLY;
         }
 
         /* Delete the specified area if it exists, else return an error */
         rv = ov_rest_idr_area_delete(&(inventory->info.area_list), area_id);
         if (rv != SA_OK) {
-                err("IDR Area not found");
+                err("IDR Area not found for resource id %d", resource_id);
                 return rv;
         }
 
@@ -2692,7 +2779,8 @@ SaErrorT ov_rest_get_idr_field(void *oh_handler,
           */
         type = oh_lookup_idrfieldtype(field_type);
         if (type == NULL) {
-                err("Invalid field type.");
+                err("Invalid field type %x for resource id %d",
+			field_type, resource_id);
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
 
@@ -2700,11 +2788,12 @@ SaErrorT ov_rest_get_idr_field(void *oh_handler,
 
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (!rpt) {
-                err("INVALID RESOURCE");
+                err("Failed to get RPT for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
         if (! (rpt->ResourceCapabilities & SAHPI_CAPABILITY_INVENTORY_DATA)) {
-                err("INVALID RESOURCE CAPABILITY");
+                err("No INVENTORY_DATA Capability for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
@@ -2713,20 +2802,22 @@ SaErrorT ov_rest_get_idr_field(void *oh_handler,
                                  SAHPI_INVENTORY_RDR,
                                  idr);
         if (rdr == NULL) {
-                err("INVALID RDR NUMBER");
+                err("Failed to get Inventory rdr for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         inventory = (struct ov_rest_inventory *)
                 oh_get_rdr_data(handler->rptcache, resource_id, rdr->RecordId);
         if (inventory == NULL) {
-                err("No inventory data. idr=%s", rdr->IdString.Data);
+                err("No inventory data. idr=%s for resource id %d",
+					rdr->IdString.Data, resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         /* Check whether the area list of the resource IDR is empty */
         if (inventory->info.idr_info.NumAreas == 0) {
-                err("IDR Area not present");
+                err("IDR Area not present for resource id %d", resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
@@ -2741,7 +2832,7 @@ SaErrorT ov_rest_get_idr_field(void *oh_handler,
                            next_field_id,
                            field);
         if (rv != SA_OK) {
-                err("IDR Field not present");
+                err("IDR Field not present for resource id %d", resource_id);
                 return rv;
         }
         return SA_OK;
@@ -2781,7 +2872,7 @@ SaErrorT ov_rest_add_idr_field(void *oh_handler,
         SaHpiRptEntryT *rpt = NULL;
         SaHpiRdrT *rdr = NULL;
         struct ov_rest_inventory *inventory = NULL;
-        struct ov_rest_area *local_area = NULL;
+        struct ovRestArea *local_area = NULL;
         char *type = NULL;
 
         if (oh_handler == NULL || field == NULL) {
@@ -2791,43 +2882,49 @@ SaErrorT ov_rest_add_idr_field(void *oh_handler,
 
         type = oh_lookup_idrfieldtype(field->Type);
         if (type == NULL) {
-                err("Invalid field type.");
+                err("Invalid field type %x for resource id %d",
+				field->Type, resource_id);
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
 
         /* It is not valid to create the field of UNSPECIFIED type */
         if (field->Type == SAHPI_IDR_FIELDTYPE_UNSPECIFIED) {
-                err("Invalid field type.");
+                err("Invalid field type %x for resource id %d",
+				field->Type, resource_id);
                 return SA_ERR_HPI_INVALID_DATA;
         }
         handler = (struct oh_handler_state *)oh_handler;
 
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (!rpt) {
-                err("INVALID RESOURCE");
+                err("Failed to get RPT for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
         if (! (rpt->ResourceCapabilities & SAHPI_CAPABILITY_INVENTORY_DATA)) {
-                err("INVALID RESOURCE CAPABILITY");
+                err("No INVENTORY_DATA Capability for resource id %d",
+						resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
         rdr = oh_get_rdr_by_type(handler->rptcache, resource_id,
                                  SAHPI_INVENTORY_RDR, idr);
         if (rdr == NULL) {
-                err("INVALID RDR NUMBER");
+                err("Failed to get Inventory rdr for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         inventory = (struct ov_rest_inventory *)
                 oh_get_rdr_data(handler->rptcache, resource_id, rdr->RecordId);
         if (inventory == NULL) {
-                err("No inventory data. idr=%s", rdr->IdString.Data);
+                err("No inventory data. idr=%s for resource id %d",
+					rdr->IdString.Data, resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         if (inventory->info.idr_info.NumAreas == 0) {
-                err("No areas in the specified IDR");
+                err("No areas in the specified IDR for resource id %d",
+						resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
@@ -2851,7 +2948,7 @@ SaErrorT ov_rest_add_idr_field(void *oh_handler,
 
         /* Check whether the specified IDR area is read only */
         if (local_area->idr_area_head.ReadOnly == SAHPI_TRUE) {
-                err("IDR Area is read only");
+                err("IDR Area is read only for resource id %d", resource_id);
                 return SA_ERR_HPI_READ_ONLY;
         }
 
@@ -2859,7 +2956,7 @@ SaErrorT ov_rest_add_idr_field(void *oh_handler,
         rv = ov_rest_idr_field_add(&(local_area->field_list),
                            field);
         if (rv != SA_OK) {
-                err("IDR field add failed");
+                err("IDR field add failed for resource id %d", resource_id);
                 if (rv == SA_ERR_HPI_OUT_OF_MEMORY) {
                         return SA_ERR_HPI_OUT_OF_SPACE;
                 }
@@ -2909,7 +3006,7 @@ SaErrorT ov_rest_add_idr_field_by_id(void *oh_handler,
         SaHpiRptEntryT *rpt = NULL;
         SaHpiRdrT *rdr = NULL;
         struct ov_rest_inventory *inventory = NULL;
-        struct ov_rest_area *local_area = NULL;
+        struct ovRestArea *local_area = NULL;
         char *type = NULL;
 
         if (oh_handler == NULL || field == NULL ||
@@ -2921,31 +3018,35 @@ SaErrorT ov_rest_add_idr_field_by_id(void *oh_handler,
 
         type = oh_lookup_idrfieldtype(field->Type);
         if (type == NULL) {
-                err("Invalid field type.");
+                err("Invalid field type %x for resource id %d",
+			field->Type, resource_id);
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
 
         /* It is not valid to create the field of UNSPECIFIED type */
         if (field->Type == SAHPI_IDR_FIELDTYPE_UNSPECIFIED) {
-                err("Invalid field type.");
+                err("Invalid field type %x for resource id %d",
+				field->Type, resource_id);
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
         handler = (struct oh_handler_state *)oh_handler;
 
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (!rpt) {
-                err("INVALID RESOURCE");
+                err("Failed to get RPT for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
         if (!(rpt->ResourceCapabilities & SAHPI_CAPABILITY_INVENTORY_DATA)) {
-                err("INVALID RESOURCE CAPABILITY");
+                err("No INVENTORY_DATA Capability for resource id %d",
+						resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
         rdr = oh_get_rdr_by_type(handler->rptcache, resource_id,
                                  SAHPI_INVENTORY_RDR, idr_id);
         if (rdr == NULL) {
-                err("INVALID RDR NUMBER");
+                err("Failed to get Inventory rdr for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
@@ -2954,12 +3055,14 @@ SaErrorT ov_rest_add_idr_field_by_id(void *oh_handler,
                                 resource_id,
                                 rdr->RecordId);
         if (inventory == NULL) {
-                err("No inventory data. idr=%s", rdr->IdString.Data);
+                err("No inventory data. idr=%s for resource id %d",
+					rdr->IdString.Data, resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         if (inventory->info.idr_info.NumAreas == 0) {
-                err("No areas in the specified IDR");
+                err("No areas in the specified IDR for resource id %d",
+						resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
@@ -2983,7 +3086,7 @@ SaErrorT ov_rest_add_idr_field_by_id(void *oh_handler,
 
         /* Check whether the specified IDR area is read only */
         if (local_area->idr_area_head.ReadOnly == SAHPI_TRUE) {
-                err("IDR Area is read only");
+                err("IDR Area is read only for resource id %d", resource_id);
         }
 
         /* Create and add the new field to  field list in IDR area */
@@ -2993,7 +3096,7 @@ SaErrorT ov_rest_add_idr_field_by_id(void *oh_handler,
                                  (char *)field->Field.Data,
                                  field->FieldId);
         if (rv != SA_OK) {
-                err("IDR field add failed");
+                err("IDR field add failed for resource id %d", resource_id);
                 if (rv == SA_ERR_HPI_OUT_OF_MEMORY) {
                         return SA_ERR_HPI_OUT_OF_SPACE;
                 }
@@ -3044,7 +3147,7 @@ SaErrorT ov_rest_set_idr_field(void *oh_handler,
         SaHpiRptEntryT *rpt = NULL;
         SaHpiRdrT *rdr = NULL;
         struct ov_rest_inventory *inventory = NULL;
-        struct ov_rest_area *local_area = NULL;
+        struct ovRestArea *local_area = NULL;
         char *type = NULL;
 
         if (oh_handler == NULL || field == NULL) {
@@ -3057,7 +3160,8 @@ SaErrorT ov_rest_set_idr_field(void *oh_handler,
          */
         type = oh_lookup_idrfieldtype(field->Type);
         if (type == NULL) {
-                err("Invalid field type.");
+                err("Invalid field type %x for resource id %d",
+				field->Type, resource_id);
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
 
@@ -3065,7 +3169,8 @@ SaErrorT ov_rest_set_idr_field(void *oh_handler,
          * SAHPI_IDR_FIELDTYPE_UNSPECIFIED
          */
         if (field->Type == SAHPI_IDR_FIELDTYPE_UNSPECIFIED) {
-                err("Invalid field type.");
+                err("Invalid field type %x for resource id %d",
+			field->Type, resource_id);
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
 
@@ -3073,18 +3178,20 @@ SaErrorT ov_rest_set_idr_field(void *oh_handler,
 
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (!rpt) {
-                err("INVALID RESOURCE");
+                err("Failed to get RPT for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
         if (! (rpt->ResourceCapabilities & SAHPI_CAPABILITY_INVENTORY_DATA)) {
-                err("INVALID RESOURCE CAPABILITY");
+                err("No INVENTORY_DATA Capability for resource id %d",
+						resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
         rdr = oh_get_rdr_by_type(handler->rptcache, resource_id,
                                  SAHPI_INVENTORY_RDR, idr);
         if (rdr == NULL) {
-                err("INVALID RDR NUMBER");
+                err("Failed to get Inventory rdr for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
@@ -3096,7 +3203,8 @@ SaErrorT ov_rest_set_idr_field(void *oh_handler,
         }
 
         if (inventory->info.idr_info.NumAreas == 0) {
-                err("No areas in the specified IDR");
+                err("No areas in the specified IDR for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
@@ -3115,14 +3223,14 @@ SaErrorT ov_rest_set_idr_field(void *oh_handler,
          * local_area will point to that area, else it is NULL
          */
         if (!local_area) {
-                err("IDR area not present");
+                err("IDR area not present for resource id %d", resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         /* Update the specified field with latest data */
         rv = ov_rest_idr_field_update(local_area->field_list, field);
         if (rv != SA_OK) {
-                err("IDR field update failed");
+                err("IDR field update failed for resource id %d", resource_id);
                 return rv;
         }
 
@@ -3168,7 +3276,7 @@ SaErrorT ov_rest_del_idr_field(void *oh_handler,
         SaHpiRptEntryT *rpt = NULL;
         SaHpiRdrT *rdr = NULL;
         struct ov_rest_inventory *inventory = NULL;
-        struct ov_rest_area *local_area = NULL;
+        struct ovRestArea *local_area = NULL;
 
         if (oh_handler == NULL) {
                 err("Invalid parameter.");
@@ -3183,30 +3291,34 @@ SaErrorT ov_rest_del_idr_field(void *oh_handler,
 
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (!rpt) {
-                err("INVALID RESOURCE");
+                err("Failed to get RPT for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
         if (! (rpt->ResourceCapabilities & SAHPI_CAPABILITY_INVENTORY_DATA)) {
-                err("INVALID RESOURCE CAPABILITY");
+                err("No INVENTORY_DATA Capability for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
         rdr = oh_get_rdr_by_type(handler->rptcache, resource_id,
                                  SAHPI_INVENTORY_RDR, idr);
         if (rdr == NULL) {
-                err("INVALID RDR NUMBER");
+                err("Failed to get Inventory rdr for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         inventory = (struct ov_rest_inventory *)
                 oh_get_rdr_data(handler->rptcache, resource_id, rdr->RecordId);
         if (inventory == NULL) {
-                err("No inventory data. idr=%s", rdr->IdString.Data);
+                err("No inventory data. idr=%s for resource id %d",
+					rdr->IdString.Data, resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         if (inventory->info.idr_info.NumAreas == 0) {
-                err("No areas in the specified IDR");
+                err("No areas in the specified IDR for resource id %d",
+								resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
@@ -3221,13 +3333,13 @@ SaErrorT ov_rest_del_idr_field(void *oh_handler,
                 local_area = local_area->next_area;
         }
         if (!local_area) {
-                err("IDR Area not present");
+                err("IDR Area not present for resource id %d", resource_id);
                 return SA_ERR_HPI_NOT_PRESENT;
         }
 
         /* Check whether the specified IDR area is read only */
         if (local_area->idr_area_head.ReadOnly == SAHPI_TRUE) {
-                err("IDR area is read only");
+                err("IDR area is read only for resource id %d", resource_id);
                 return SA_ERR_HPI_READ_ONLY;
         }
 

@@ -5,7 +5,7 @@ dnl   various hacks by Sean Dague <http://dague.net/sean> 4/23/03
 
 
 AC_PREREQ(2.57)
-AC_INIT(openhpi, 3.7.0)
+AC_INIT(openhpi, 3.8.0)
 AC_CONFIG_SRCDIR(openhpi.spec.in)
 AM_INIT_AUTOMAKE([1.8])
 
@@ -23,7 +23,7 @@ AH_BOTTOM([#endif /* __OPENHPI_CONFIG_H */])
 # minor version: 11 = 11
 # patch version: 4  = 4
 #
-HPI_LIB_VERSION=10:0:7
+HPI_LIB_VERSION=11:0:8
 HPI_PKG=$PACKAGE_NAME
 HPI_UTIL_PKG=${PACKAGE_NAME}utils
 HPI_CLIENT_PKG=${PACKAGE_NAME}client
@@ -179,7 +179,7 @@ AC_CHECK_HEADERS([openssl/md2.h openssl/md5.h openssl/bio.h openssl/ssl.h openss
 
 dnl xml is used for XML-based communication in ilo2_ribcl and oa_soap
 AC_CHECK_LIB([xml2],[xmlParseMemory],[XML2_LIB=-lxml2],[XML2_LIB=])
-AC_CHECK_HEADERS([libxml2/libxml/xmlexports.h],[XML2_INCLUDE="-I/usr/include/libxml2"],[XML2_INCLUDE])
+AC_CHECK_HEADERS([libxml2/libxml/xmlexports.h],[XML2_INCLUDE="-I/usr/include/libxml2"],[XML2_INCLUDE=])
 AC_SUBST(XML2_LIB)
 AC_SUBST(XML2_INCLUDE)
 
@@ -188,12 +188,12 @@ AC_CHECK_LIB([curl],[curl_global_init],[CURL_LIB=-lcurl],[CURL_LIB=])
 AC_SUBST(CURL_LIB)
 AC_CHECK_HEADERS([curl/curl.h],[have_curl=yes],[have_curl=no])
 AC_CHECK_LIB([json-c],[json_tokener_parse],[JSON_C_LIB=-ljson-c],[JSON_C_LIB=])
-AC_CHECK_HEADERS([json-c/json.h],[JSON_C_INCLUDE="-I/usr/include/json-c"],[JSON_C_INCLUDE])
+AC_CHECK_HEADERS([json-c/json.h],[JSON_C_INCLUDE="-I/usr/include/json-c"],[JSON_C_INCLUDE=])
 AC_SUBST(JSON_C_LIB)
 AC_SUBST(JSON_C_INCLUDE)
 AC_CHECK_LIB([rabbitmq],[amqp_new_connection],[RABBITMQ_LIB=-lrabbitmq],[RABBITMQ_LIB=])
 AC_SUBST(RABBITMQ_LIB)
-DISTRO=`grep "^ID=" /etc/os-release | awk -F"\"" '{ print $2 }'`
+AC_CHECK_FILE([/etc/os-release],[DISTRO=`grep "^ID=" /etc/os-release | awk -F"\"" '{ print $2 }'`])
 
 AC_CHECK_HEADERS([amqp.h],[have_rabbitmq=yes],[have_rabbitmq=no])
 

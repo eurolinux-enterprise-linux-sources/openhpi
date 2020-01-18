@@ -72,7 +72,7 @@ static SaErrorT ov_rest_wait_for_action_completion(void *oh_handler,
         int polls = 0;
 
         if (oh_handler == NULL) {
-                err("Iinvalid parameter oh_handler");
+                err("Invalid parameter oh_handler");
                 return SA_ERR_HPI_INVALID_PARAMS;
         }	
 
@@ -132,7 +132,7 @@ SaErrorT ov_rest_get_reset_state(void *oh_handler,
         /* Get the current power state of the resource */
         rv = ov_rest_get_power_state(oh_handler, resource_id, &state);
         if (rv != SA_OK) {
-                err("Get server power state failed");
+                err("Get power state failed for server id %d", resource_id);
                 return rv;
         }
 
@@ -150,11 +150,13 @@ SaErrorT ov_rest_get_reset_state(void *oh_handler,
                  * its current power state
                  */
                 case (SAHPI_POWER_CYCLE):
-                        err("Wrong reset state (Power cycle) detected");
+                        err("Wrong reset state (Power cycle) detected"
+				" for server id %d", resource_id);
                         return SA_ERR_HPI_INTERNAL_ERROR;
                         break;
                 default:
-                        err("Wrong reset state %d detected", state);
+                        err("Wrong reset state %d detected for server id %d",
+						state, resource_id);
                         return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -211,7 +213,8 @@ SaErrorT ov_rest_set_reset_state(void *oh_handler,
 
         /* Check whether resource has reset capability */
         if (! (rpt->ResourceCapabilities & SAHPI_CAPABILITY_RESET)) {
-                err("INVALID RESOURCE CAPABILITY");
+                err("No RESET Capability for resource id %d",
+						resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
@@ -223,7 +226,8 @@ SaErrorT ov_rest_set_reset_state(void *oh_handler,
                         rv = ov_rest_set_power_state(oh_handler, resource_id,
                                                               SAHPI_POWER_ON);
                         if (rv != SA_OK) {
-                                err("Set power ON failed");
+                                err("Set power ON failed for resource id %d",
+							resource_id);
                         	return rv;
 			}
                         ov_rest_wait_for_action_completion(oh_handler,
@@ -237,7 +241,8 @@ SaErrorT ov_rest_set_reset_state(void *oh_handler,
                         rv = ov_rest_set_power_state(oh_handler, resource_id,
                                                      SAHPI_POWER_OFF);
                         if (rv != SA_OK) {
-                                err("Set power OFF failed");
+                                err("Set power OFF failed for resource id %d",
+								resource_id);
                         	return rv;
 			}
                         ov_rest_wait_for_action_completion(oh_handler,
@@ -250,7 +255,8 @@ SaErrorT ov_rest_set_reset_state(void *oh_handler,
                         rv = ov_rest_get_power_state(oh_handler, resource_id,
                                                      &tmp);
                         if (rv != SA_OK) {
-                                err("Get power state failed");
+                                err("Get power state failed for resource id %d",
+								resource_id);
                                 return rv;
                         }
 
@@ -264,7 +270,9 @@ SaErrorT ov_rest_set_reset_state(void *oh_handler,
                         /* Check whether ov_handler mutex is locked or not */
                         rv = lock_ov_rest_handler(ov_handler);
                         if (rv != SA_OK) {
-                                err("OV REST handler is locked");
+                                err("OV REST handler is locked while calling "
+					"__func__ for resource id %d",
+					resource_id);
                                 return rv;
                         }
 			
@@ -277,7 +285,7 @@ SaErrorT ov_rest_set_reset_state(void *oh_handler,
                                         " resource id", resource_id);
                                 return int_err_ret;
                         }
-                        asprintf(&conn->url, "https://%s%s", conn->hostname,
+                        WRAP_ASPRINTF(&conn->url, "https://%s%s", conn->hostname,
                                                                         url);
                         wrap_free (url);
 
@@ -291,20 +299,20 @@ SaErrorT ov_rest_set_reset_state(void *oh_handler,
                                          * Reset the server blade
                                          */
                                         if (action == SAHPI_COLD_RESET){
-                                                asprintf(&postField,"%s",
+                                                WRAP_ASPRINTF(&postField,"%s",
                                                  "{\"powerState\":\"On\",\
                                          \"powerControl\":\"ColdBoot\"}");
                                         }
                                         else{
-                                                asprintf(&postField,"%s",
+                                                WRAP_ASPRINTF(&postField,"%s",
                                                  "{\"powerState\":\"On\",\
                                             \"powerControl\":\"Reset\"}");
                                         }
 
-                                        asprintf(&uri,"%s/powerState",
+                                        WRAP_ASPRINTF(&uri,"%s/powerState",
                                                                 conn->url);
                                         wrap_free(conn->url);
-                                        asprintf(&conn->url,"%s",uri);
+                                        WRAP_ASPRINTF(&conn->url,"%s",uri);
                                         wrap_free(uri);
 
                                         rv = rest_put_request(conn, &response,
@@ -313,7 +321,8 @@ SaErrorT ov_rest_set_reset_state(void *oh_handler,
 
                                         if (rv != SA_OK) {
                                                 err("Set blade power to power "
-                                                    "reset failed");
+                                                    "reset failed for resource "
+							"id %d", resource_id);
                                                 return int_err_ret;
                                         }
 
@@ -330,7 +339,7 @@ SaErrorT ov_rest_set_reset_state(void *oh_handler,
                                         /* Resource type is interconnect blade.
                                          * Reset the interconnect blade
                                          */
-                                        asprintf(&postField,"%s",
+                                        WRAP_ASPRINTF(&postField,"%s",
                                                  "[{ \"op\": \"replace\",\
                                          \"path\": \"/deviceResetState\",\
                                                   \"value\": \"Reset\" }]");
@@ -341,7 +350,8 @@ SaErrorT ov_rest_set_reset_state(void *oh_handler,
 
                                         if (rv != SA_OK) {
                                                 err("Set interconnect reset "
-                                                    "failed");
+                                                    "failed for resource id %d",
+								resource_id);
                                                 return int_err_ret;
                                         }
 

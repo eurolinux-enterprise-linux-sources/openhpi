@@ -444,6 +444,7 @@ SaErrorT oa_soap_add_idr_area(void *oh_handler,
         if (rv != SA_OK) {
                 err("Addition of IDR area failed");
                 if (rv == SA_ERR_HPI_OUT_OF_MEMORY) {
+                        err("Insufficient memory. Unable to add the idr area");
                         return SA_ERR_HPI_OUT_OF_SPACE;
                 }
                 return rv;
@@ -570,6 +571,7 @@ SaErrorT oa_soap_add_idr_area_by_id (void *oh_handler,
         if (rv != SA_OK) {
                 err("Addition of IDR area failed");
                 if (rv == SA_ERR_HPI_OUT_OF_MEMORY) {
+                        err("Insufficient memory. Unable to add the idr area");
                         return SA_ERR_HPI_OUT_OF_SPACE;
                 }
                 return rv;
@@ -901,6 +903,7 @@ SaErrorT oa_soap_add_idr_field(void *oh_handler,
         if (rv != SA_OK) {
                 err("IDR field add failed");
                 if (rv == SA_ERR_HPI_OUT_OF_MEMORY) {
+                        err("Insufficient memory. Unable to add the idr field");
                         return SA_ERR_HPI_OUT_OF_SPACE;
                 }
                 return rv;
@@ -1035,6 +1038,7 @@ SaErrorT oa_soap_add_idr_field_by_id(void *oh_handler,
         if (rv != SA_OK) {
                 err("IDR field add failed");
                 if (rv == SA_ERR_HPI_OUT_OF_MEMORY) {
+                        err("Insufficient memory. Unable to add the idr field");
                         return SA_ERR_HPI_OUT_OF_SPACE;
                 }
                 return rv;
@@ -1975,7 +1979,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                         rv = asprintf(&tmp, "MP Model name = %s",
                                         blade_mp_response.modelName);
                         if(rv == -1){
-                                free(tmp);
+                                wrap_free(tmp);
                                 err("Failed to allocate memory for buffer to  \
                                                 hold MP Model name");
                                 return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -1990,7 +1994,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                                 &hpi_field);
                                 if (rv != SA_OK) {
                                         err("Add idr field failed");
-                                        free(tmp);
+                                        wrap_free(tmp);
                                         return rv;
                                 }
 
@@ -2001,7 +2005,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                 err("Source String length is greater than      \
                                                 SAHPI_MAX_TEXT_BUFFER_LENGTH");
                         }
-                        free(tmp);
+                        wrap_free(tmp);
                         tmp = NULL;
                 }
                 if (blade_mp_response.ipAddress != NULL) {
@@ -2012,7 +2016,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                         rv = asprintf(&tmp, "MP IP Address = %s",
                                         blade_mp_response.ipAddress);
                         if(rv == -1){
-                                free(tmp);
+                                wrap_free(tmp);
                                 err("Failed to allocate memory for buffer to  \
                                                 hold MP IP Address");
                                 return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2027,7 +2031,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                                 &hpi_field);
                                 if (rv != SA_OK) {
                                         err("Add idr field failed");
-                                        free(tmp);
+                                        wrap_free(tmp);
                                         return rv;
                                 }
 
@@ -2038,7 +2042,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                 err("Source String length is greater than      \
                                                 SAHPI_MAX_TEXT_BUFFER_LENGTH");
                         }
-                        free(tmp);
+                        wrap_free(tmp);
                         tmp = NULL;
                 }
                 if (blade_mp_response.macAddress != NULL) {
@@ -2049,7 +2053,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                         rv = asprintf(&tmp, "MP MAC Address = %s",
                                         blade_mp_response.macAddress);
                         if(rv == -1){
-                                free(tmp);
+                                wrap_free(tmp);
                                 err("Failed to allocate memory for buffer to  \
                                                 hold MP MAC Address");
                                 return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2064,7 +2068,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                                 &hpi_field);
                                 if (rv != SA_OK) {
                                         err("Add idr field failed");
-                                        free(tmp);
+                                        wrap_free(tmp);
                                         return rv;
                                 }
 
@@ -2075,7 +2079,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                 err("Source String length is greater than      \
                                                 SAHPI_MAX_TEXT_BUFFER_LENGTH");
                         }
-                        free(tmp);
+                        wrap_free(tmp);
                         tmp = NULL;
                 }
                 if (blade_mp_response.dnsName != NULL) {
@@ -2086,7 +2090,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                         rv = asprintf(&tmp, "MP DNS name = %s",
                                         blade_mp_response.dnsName);
                         if(rv == -1){
-                                free(tmp);
+                                wrap_free(tmp);
                                 err("Failed to allocate memory for buffer to  \
                                                 hold MP DNS name");
                                 return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2101,7 +2105,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                                 &hpi_field);
                                 if (rv != SA_OK) {
                                         err("Add idr field failed");
-                                        free(tmp);
+                                        wrap_free(tmp);
                                         return rv;
                                 }
 
@@ -2112,7 +2116,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                 err("Source String length is greater than      \
                                                 SAHPI_MAX_TEXT_BUFFER_LENGTH");
                         }
-                        free(tmp);
+                        wrap_free(tmp);
                         tmp = NULL;
                 }
                        /* Get the Blade NIC information*/
@@ -2130,7 +2134,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                         rv = asprintf(&tmp, "NICs Installed = %d",
                                         response.numberOfNics);
                         if(rv == -1){
-                                free(tmp);
+                                wrap_free(tmp);
                                 err("Failed to allocate memory for buffer to  \
                                                 hold NICs Installed");
                                 return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2145,7 +2149,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                                 &hpi_field);
                                 if (rv != SA_OK) {
                                         err("Add idr field failed");
-                                        free(tmp);
+                                        wrap_free(tmp);
                                         return rv;
                                 }
 
@@ -2156,7 +2160,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                 err("Source String length is greater than      \
                                                 SAHPI_MAX_TEXT_BUFFER_LENGTH");
                         }
-                        free(tmp);
+                        wrap_free(tmp);
                         tmp = NULL;
                 while (response.nics){
 
@@ -2172,7 +2176,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                        rv = asprintf(&tmp, "%s = %s", nic_info.port,
                                 nic_info.macAddress);
                        if(rv == -1){
-                               free(tmp);
+                               wrap_free(tmp);
                                err("Failed to allocate memory for buffer to   \
                                                hold MAC Address and NIC Port");
                                return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2187,7 +2191,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                                &hpi_field);
                                if (rv != SA_OK) {
                                        err("Add idr field failed");
-                                       free(tmp);
+                                       wrap_free(tmp);
                                        return rv;
                                }
 
@@ -2198,7 +2202,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                err("Source String length is greater than      \
                                                SAHPI_MAX_TEXT_BUFFER_LENGTH");
                        }
-                        free(tmp);
+                        wrap_free(tmp);
                         tmp = NULL;
                 }
                response.nics = soap_next_node(response.nics);
@@ -2216,7 +2220,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                         if(rv == -1){
                                 err("Failed to allocate memory for buffer to  \
                                                 hold No. of CPUs");
-                                free(tmp);
+                                wrap_free(tmp);
                                 return SA_ERR_HPI_OUT_OF_MEMORY;
                         }
                         if(strlen(tmp) < SAHPI_MAX_TEXT_BUFFER_LENGTH){
@@ -2229,7 +2233,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                                 &hpi_field);
                                 if (rv != SA_OK) {
                                         err("Add idr field failed");
-                                        free(tmp);
+                                        wrap_free(tmp);
                                         return rv;
                                 }
 
@@ -2240,7 +2244,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                 err("Source String length is greater than      \
                                                 SAHPI_MAX_TEXT_BUFFER_LENGTH");
                         }
-                        free(tmp);
+                        wrap_free(tmp);
                         tmp = NULL;
                 }
 
@@ -2252,7 +2256,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                         rv = asprintf(&tmp, "CPU %d = %s, %d MHz",
                                 ++cpu_no,cpu_info.cpuType,cpu_info.cpuSpeed);
                         if(rv == -1){
-                                free(tmp);
+                                wrap_free(tmp);
                                 err("Failed to allocate memory for buffer to  \
                                                 hold CPU name and speed");
                                 return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2261,7 +2265,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                 else {
                         rv = asprintf(&tmp, "CPU %d = Not present",++cpu_no);
                         if(rv == -1){
-                                free(tmp);
+                                wrap_free(tmp);
                                 err("Failed to allocate memory for buffer to  \
                                                 hold Not present CPU Number");
                                 return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2281,7 +2285,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                                 &hpi_field);
                                 if (rv != SA_OK) {
                                         err("Add idr field failed");
-                                        free(tmp);
+                                        wrap_free(tmp);
                                         return rv;
                                 }
 
@@ -2292,7 +2296,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                 err("Source String length is greater than      \
                                                 SAHPI_MAX_TEXT_BUFFER_LENGTH");
                         }
-                        free(tmp);
+                        wrap_free(tmp);
                         tmp = NULL;
                response.cpus = soap_next_node(response.cpus);
               }
@@ -2307,7 +2311,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                         rv = asprintf(&tmp, "Memory(RAM) = %d MB",
                                         response.memory);
                         if(rv == -1){
-                                free(tmp);
+                                wrap_free(tmp);
                                 err("Failed to allocate memory for buffer to  \
                                                 hold Memory(RAM) size");
                                 return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2322,7 +2326,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                                 &hpi_field);
                                 if (rv != SA_OK) {
                                         err("Add idr field failed");
-                                        free(tmp);
+                                        wrap_free(tmp);
                                         return rv;
                                 }
 
@@ -2333,7 +2337,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                 err("Source String length is greater than      \
                                                 SAHPI_MAX_TEXT_BUFFER_LENGTH");
                         }
-                        free(tmp);
+                        wrap_free(tmp);
                         tmp = NULL;
                 }
 
@@ -2354,7 +2358,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                 rv = asprintf(&tmp, "Mezz No. = %s",
                                                 mezz_info.mezzNumber);
                                 if(rv == -1){
-                                        free(tmp);
+                                        wrap_free(tmp);
                                         err("Failed to allocate memory for    \
                                                         buffer to hold        \
                                                         Mezz No.");
@@ -2371,7 +2375,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                                         &hpi_field);
                                         if (rv != SA_OK) {
                                                 err("Add idr field failed");
-                                                free(tmp);
+                                                wrap_free(tmp);
                                                 return rv;
                                         }
 
@@ -2385,7 +2389,7 @@ SaErrorT build_server_inv_rdr(struct oh_handler_state *oh_handler,
                                                         SAHPI_MAX_TEXT_      \
                                                         BUFFER_LENGTH");
                                 }
-                                free(tmp);
+                                wrap_free(tmp);
                                 tmp = NULL;
                         }
                         /*** Add Mezz Slot Innventory fileds ***/
@@ -2528,6 +2532,8 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
                               &add_success_flag);
         if (rv != SA_OK) {
                 err("Add product area failed");
+                wrap_g_free(local_inventory->comment);
+                wrap_g_free(local_inventory);
                 return rv;
         }
 
@@ -2553,6 +2559,8 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
                             &add_success_flag);
         if (rv != SA_OK) {
                 err("Add board area failed");
+                wrap_g_free(local_inventory->comment);
+                wrap_g_free(local_inventory);
                 return rv;
         }
         if (add_success_flag != SAHPI_FALSE) {
@@ -2577,6 +2585,8 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
                                &blade_mp_request, &blade_mp_response);
                 if (rv != SOAP_OK) {
                         err("Get blade mp info failed");
+                        wrap_g_free(local_inventory->comment);
+                        wrap_g_free(local_inventory);
                         return rv;
                 }
 
@@ -2596,6 +2606,8 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
                                            &hpi_field);
                         if (rv != SA_OK) {
                                 err("Add idr field failed");
+                                wrap_g_free(local_inventory->comment);
+                                wrap_g_free(local_inventory);
                                 return rv;
                         }
 
@@ -2618,7 +2630,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 			rv = asprintf(&tmp, "MP Model name = %s", 
 					blade_mp_response.modelName);
 			if(rv == -1){
-				free(tmp);
+				wrap_free(tmp);
+				wrap_g_free(local_inventory->comment);
+				wrap_g_free(local_inventory);
 				err("Failed to allocate memory for buffer to  \
 						hold MP Model name");
 				return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2633,7 +2647,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 						&hpi_field);
 				if (rv != SA_OK) {
 					err("Add idr field failed");
-					free(tmp);
+					wrap_free(tmp);
+					wrap_g_free(local_inventory->comment);
+					wrap_g_free(local_inventory);
 					return rv;
 				}
 
@@ -2644,7 +2660,7 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 				err("Source String length is greater than      \
 						SAHPI_MAX_TEXT_BUFFER_LENGTH");
 			}
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
 		}
 		if (blade_mp_response.ipAddress != NULL) {
@@ -2655,7 +2671,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 			rv = asprintf(&tmp, "MP IP Address = %s", 
 					blade_mp_response.ipAddress);
 			if(rv == -1){
-				free(tmp);
+				wrap_free(tmp);
+				wrap_g_free(local_inventory->comment);
+				wrap_g_free(local_inventory);
 				err("Failed to allocate memory for buffer to  \
 						hold MP IP Address");
 				return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2670,7 +2688,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 						&hpi_field);
 				if (rv != SA_OK) {
 					err("Add idr field failed");
-					free(tmp);
+					wrap_free(tmp);
+					wrap_g_free(local_inventory->comment);
+					wrap_g_free(local_inventory);
 					return rv;
 				}
 
@@ -2681,7 +2701,7 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 				err("Source String length is greater than      \
 						SAHPI_MAX_TEXT_BUFFER_LENGTH");
 			}
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
 		}
 		if (blade_mp_response.macAddress != NULL) {
@@ -2692,7 +2712,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 			rv = asprintf(&tmp, "MP MAC Address = %s", 
 					blade_mp_response.macAddress);
 			if(rv == -1){
-				free(tmp);
+				wrap_free(tmp);
+				wrap_g_free(local_inventory->comment);
+				wrap_g_free(local_inventory);
 				err("Failed to allocate memory for buffer to  \
 						hold MP MAC Address");
 				return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2707,7 +2729,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 						&hpi_field);
 				if (rv != SA_OK) {
 					err("Add idr field failed");
-					free(tmp);
+					wrap_free(tmp);
+					wrap_g_free(local_inventory->comment);
+					wrap_g_free(local_inventory);
 					return rv;
 				}
 
@@ -2718,7 +2742,7 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 				err("Source String length is greater than      \
 						SAHPI_MAX_TEXT_BUFFER_LENGTH");
 			}
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
 		}
 		if (blade_mp_response.dnsName != NULL) {
@@ -2729,7 +2753,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 			rv = asprintf(&tmp, "MP DNS name = %s", 
 					blade_mp_response.dnsName);
 			if(rv == -1){
-				free(tmp);
+				wrap_free(tmp);
+				wrap_g_free(local_inventory->comment);
+				wrap_g_free(local_inventory);
 				err("Failed to allocate memory for buffer to  \
 						hold MP DNS name");
 				return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2744,7 +2770,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 						&hpi_field);
 				if (rv != SA_OK) {
 					err("Add idr field failed");
-					free(tmp);
+					wrap_free(tmp);
+					wrap_g_free(local_inventory->comment);
+					wrap_g_free(local_inventory);
 					return rv;
 				}
 
@@ -2755,7 +2783,7 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 				err("Source String length is greater than      \
 						SAHPI_MAX_TEXT_BUFFER_LENGTH");
 			}
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
 		}
 		/* Adding Custom Field for Number of NICs Installed*/
@@ -2766,7 +2794,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 			rv = asprintf(&tmp, "NICs Installed = %d", 
 					response->numberOfNics);
 			if(rv == -1){
-				free(tmp);
+				wrap_free(tmp);
+				wrap_g_free(local_inventory->comment);
+				wrap_g_free(local_inventory);
 				err("Failed to allocate memory for buffer to  \
 						hold NICs Installed");
 				return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2781,7 +2811,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 						&hpi_field);
 				if (rv != SA_OK) {
 					err("Add idr field failed");
-					free(tmp);
+					wrap_free(tmp);
+					wrap_g_free(local_inventory->comment);
+					wrap_g_free(local_inventory);
 					return rv;
 				}
 
@@ -2792,7 +2824,7 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 				err("Source String length is greater than      \
 						SAHPI_MAX_TEXT_BUFFER_LENGTH");
 			}
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
                 while (response->nics){
 
@@ -2808,7 +2840,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
                        rv = asprintf(&tmp, "%s = %s", nic_info.port, 
 				nic_info.macAddress);
 		       if(rv == -1){
-			       free(tmp);
+			       wrap_free(tmp);
+			       wrap_g_free(local_inventory->comment); 
+			       wrap_g_free(local_inventory);
 			       err("Failed to allocate memory for buffer to   \
 					       hold MAC Address and NIC Port");
 			       return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2823,7 +2857,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 					       &hpi_field);
 			       if (rv != SA_OK) {
 				       err("Add idr field failed");
-				       free(tmp);
+				       wrap_free(tmp);
+				       wrap_g_free(local_inventory->comment);
+				       wrap_g_free(local_inventory);
 				       return rv;
 			       }
 
@@ -2834,7 +2870,7 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 			       err("Source String length is greater than      \
 					       SAHPI_MAX_TEXT_BUFFER_LENGTH");
 		       }
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
                 }
                response->nics = soap_next_node(response->nics);
@@ -2852,7 +2888,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 			if(rv == -1){
 				err("Failed to allocate memory for buffer to  \
 						hold No. of CPUs");
-				free(tmp);
+				wrap_free(tmp);
+				wrap_g_free(local_inventory->comment);
+				wrap_g_free(local_inventory);
 				return SA_ERR_HPI_OUT_OF_MEMORY;
 			}
 			if(strlen(tmp) < SAHPI_MAX_TEXT_BUFFER_LENGTH){
@@ -2865,7 +2903,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 						&hpi_field);
 				if (rv != SA_OK) {
 					err("Add idr field failed");
-					free(tmp);
+					wrap_free(tmp);
+					wrap_g_free(local_inventory->comment);
+					wrap_g_free(local_inventory);
 					return rv;
 				}
 
@@ -2876,7 +2916,7 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 				err("Source String length is greater than      \
 						SAHPI_MAX_TEXT_BUFFER_LENGTH");
 			}
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
 		}
 
@@ -2888,7 +2928,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 			rv = asprintf(&tmp, "CPU %d = %s, %d MHz",
 				++cpu_no,cpu_info.cpuType,cpu_info.cpuSpeed);
 			if(rv == -1){
-				free(tmp);
+				wrap_free(tmp);
+				wrap_g_free(local_inventory->comment);
+				wrap_g_free(local_inventory);
 				err("Failed to allocate memory for buffer to  \
 						hold CPU name and speed");
 				return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2897,7 +2939,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 		else {
 			rv = asprintf(&tmp, "CPU %d = Not present",++cpu_no);
 			if(rv == -1){
-				free(tmp);
+				wrap_free(tmp);
+				wrap_g_free(local_inventory->comment);
+				wrap_g_free(local_inventory);
 				err("Failed to allocate memory for buffer to  \
 						hold Not present CPU Number");
 				return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2917,7 +2961,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 						&hpi_field);
 				if (rv != SA_OK) {
 					err("Add idr field failed");
-					free(tmp);
+					wrap_free(tmp);
+					wrap_g_free(local_inventory->comment);
+					wrap_g_free(local_inventory);
 					return rv;
 				}
 
@@ -2928,7 +2974,7 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 				err("Source String length is greater than      \
 						SAHPI_MAX_TEXT_BUFFER_LENGTH");
 			}
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
                response->cpus = soap_next_node(response->cpus);
               }
@@ -2943,7 +2989,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 			rv = asprintf(&tmp, "Memory(RAM) = %d MB",
 					response->memory);
 			if(rv == -1){
-				free(tmp);
+				wrap_free(tmp);
+				wrap_g_free(local_inventory->comment);
+				wrap_g_free(local_inventory);
 				err("Failed to allocate memory for buffer to  \
 						hold Memory(RAM) size");
 				return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -2958,7 +3006,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 						&hpi_field);
 				if (rv != SA_OK) {
 					err("Add idr field failed");
-					free(tmp);
+					wrap_free(tmp);
+					wrap_g_free(local_inventory->comment);
+					wrap_g_free(local_inventory);
 					return rv;
 				}
 
@@ -2969,7 +3019,7 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 				err("Source String length is greater than      \
 						SAHPI_MAX_TEXT_BUFFER_LENGTH");
 			}
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
 		}
 
@@ -2984,7 +3034,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 				rv = asprintf(&tmp, "Mezz No. = %s",
 						mezz_info.mezzNumber);
 				if(rv == -1){
-					free(tmp);
+					wrap_free(tmp);
+					wrap_g_free(local_inventory->comment);
+					wrap_g_free(local_inventory);
 					err("Failed to allocate memory for    \
 							buffer to hold        \
 							Mezz No.");
@@ -3001,7 +3053,9 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 							&hpi_field);
 					if (rv != SA_OK) {
 						err("Add idr field failed");
-						free(tmp);
+						wrap_free(tmp);
+						wrap_g_free(local_inventory->comment);
+						wrap_g_free(local_inventory);
 						return rv;
 					}
 
@@ -3015,7 +3069,7 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 							SAHPI_MAX_TEXT_      \
 							BUFFER_LENGTH");
 				}
-				free(tmp);
+				wrap_free(tmp);
 				tmp = NULL;
 			}
 			/*** Add Mezz Slot Innventory fileds ***/
@@ -3025,6 +3079,8 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 						local_inventory);
 				if(rv != SA_OK){
 					err("Add mezz_slot_idr_fields failed");
+					wrap_g_free(local_inventory->comment);
+					wrap_g_free(local_inventory);
 					return rv;
 				}
 			}
@@ -3038,6 +3094,8 @@ SaErrorT build_server_inv_rdr_arr(struct oh_handler_state *oh_handler,
 				if(rv != SA_OK){
 					err("Add mezz_devices_idr_fields \
 							failed");
+					wrap_g_free(local_inventory->comment);
+					wrap_g_free(local_inventory);
 					return rv;
 				}
 				
@@ -3141,7 +3199,7 @@ SaErrorT add_mezz_slot_idr_fields(xmlNode *mezzSlots,
 			if(rv == -1){
 				err("Failed to allocate memory for    \
 						buffer to hold Mezz Slot No.");
-				free(tmp);
+				wrap_free(tmp);
 				return SA_ERR_HPI_OUT_OF_MEMORY;
 			}
 			if(strlen(tmp) < SAHPI_MAX_TEXT_BUFFER_LENGTH){
@@ -3154,7 +3212,7 @@ SaErrorT add_mezz_slot_idr_fields(xmlNode *mezzSlots,
 						&hpi_field);
 				if (rv != SA_OK) {
 					err("Add idr field failed");
-					free(tmp);
+					wrap_free(tmp);
 					return rv;
 				}
 
@@ -3165,7 +3223,7 @@ SaErrorT add_mezz_slot_idr_fields(xmlNode *mezzSlots,
 				err("Source Strig length is greater than      \
 						SAHPI_MAX_TEXT_BUFFER_LENGTH");
 			}
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
 
 		}
@@ -3182,7 +3240,7 @@ SaErrorT add_mezz_slot_idr_fields(xmlNode *mezzSlots,
 			if(rv == -1){
 				err("Failed to allocate memory for buffer to \
 						hold InterconnectTrayBay No.");
-				free(tmp);
+				wrap_free(tmp);
 				return SA_ERR_HPI_OUT_OF_MEMORY;
 			}
 			if(strlen(tmp) < SAHPI_MAX_TEXT_BUFFER_LENGTH){
@@ -3195,7 +3253,7 @@ SaErrorT add_mezz_slot_idr_fields(xmlNode *mezzSlots,
 						&hpi_field);
 				if (rv != SA_OK) {
 					err("Add idr field failed");
-					free(tmp);
+					wrap_free(tmp);
 					return rv;
 				}
 
@@ -3206,7 +3264,7 @@ SaErrorT add_mezz_slot_idr_fields(xmlNode *mezzSlots,
 				err("Source String length is greater than      \
 						SAHPI_MAX_TEXT_BUFFER_LENGTH");
 			}
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
 		}
 		if(mezzSlots_slot.interconnectTrayPortNumber != NULL){
@@ -3222,7 +3280,7 @@ SaErrorT add_mezz_slot_idr_fields(xmlNode *mezzSlots,
 			if(rv == -1){
 				err("Failed to allocate memory for buffer to   \
 						hold InterconnectTrayPort No.");
-				free(tmp);
+				wrap_free(tmp);
 				return SA_ERR_HPI_OUT_OF_MEMORY;
 			}
 			if(strlen(tmp) < SAHPI_MAX_TEXT_BUFFER_LENGTH){
@@ -3234,7 +3292,7 @@ SaErrorT add_mezz_slot_idr_fields(xmlNode *mezzSlots,
 						&hpi_field);
 				if (rv != SA_OK) {
 					err("Add idr field failed");
-					free(tmp);
+					wrap_free(tmp);
 					return rv;
 				}
 
@@ -3245,7 +3303,7 @@ SaErrorT add_mezz_slot_idr_fields(xmlNode *mezzSlots,
 				err("Source String length is greater than      \
 						SAHPI_MAX_TEXT_BUFFER_LENGTH");
 			}
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
 		}
 		mezzSlot_Info.slot = soap_next_node(mezzSlot_Info.slot);
@@ -3394,7 +3452,7 @@ SaErrorT add_mezz_device_idr_fields(xmlNode *mezzDevices,
 			if(rv == -1){
 				err("Failed to allocate memory for buffer to   \
 						hold MezzDevPort No.");
-				free(tmp);
+				wrap_free(tmp);
 				return SA_ERR_HPI_OUT_OF_MEMORY;
 			}
 			if(strlen(tmp) < SAHPI_MAX_TEXT_BUFFER_LENGTH){
@@ -3407,7 +3465,7 @@ SaErrorT add_mezz_device_idr_fields(xmlNode *mezzDevices,
 						&hpi_field);
 				if (rv != SA_OK) {
 					err("Add idr field failed");
-					free(tmp);
+					wrap_free(tmp);
 					return rv;
 				}
 
@@ -3418,7 +3476,7 @@ SaErrorT add_mezz_device_idr_fields(xmlNode *mezzDevices,
 				err("Source String length is greater than      \
 						SAHPI_MAX_TEXT_BUFFER_LENGTH");
 			}
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
 			if(mezzDev_Port.wwpn != NULL){
 				memset(&hpi_field, 0, sizeof(SaHpiIdrFieldT));
@@ -3432,7 +3490,7 @@ SaErrorT add_mezz_device_idr_fields(xmlNode *mezzDevices,
 					err("Failed to allocate memory for    \
 							buffer to hold        \
 							MezzDevPort wwpn");
-					free(tmp);
+					wrap_free(tmp);
 					return SA_ERR_HPI_OUT_OF_MEMORY;
 				}
 
@@ -3446,7 +3504,7 @@ SaErrorT add_mezz_device_idr_fields(xmlNode *mezzDevices,
 							&hpi_field);
 					if (rv != SA_OK) {
 						err("Add idr field failed");
-						free(tmp);
+						wrap_free(tmp);
 						return rv;
 					}
 
@@ -3460,7 +3518,7 @@ SaErrorT add_mezz_device_idr_fields(xmlNode *mezzDevices,
 							SAHPI_MAX_TEXT_	     \
 							BUFFER_LENGTH");
 				}
-				free(tmp);
+				wrap_free(tmp);
 				tmp = NULL;
 			}
 			switch(mezzDev_Port.fabric){
@@ -3764,8 +3822,16 @@ SaErrorT build_server_inventory_area(SOAP_CON *con,
                         hpi_field.AreaId = local_inventory->info.area_list->
                                            idr_area_head.AreaId;
                         hpi_field.Type = SAHPI_IDR_FIELDTYPE_PRODUCT_VERSION;
-                        strcpy ((char *)hpi_field.Field.Data,
-                                blade_mp_response.fwVersion);
+                        if(strlen(blade_mp_response.fwVersion) <
+                                        SAHPI_MAX_TEXT_BUFFER_LENGTH){
+                                strcpy ((char *)hpi_field.Field.Data,
+                                                blade_mp_response.fwVersion);
+                        }else{
+                                err("The src string %s is bigger than the max "
+                                        "buffer length %d",
+                                        blade_mp_response.fwVersion,
+                                        SAHPI_MAX_TEXT_BUFFER_LENGTH);
+                        }
 
                         rv = idr_field_add(&(local_inventory->info.area_list
                                            ->field_list),
@@ -3909,6 +3975,8 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
                               &add_success_flag);
         if (rv != SA_OK) {
                 err("Add product area failed");
+                wrap_g_free(local_inventory->comment);
+                wrap_g_free(local_inventory);
                 return rv;
         }
 
@@ -3934,6 +4002,8 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
                             &add_success_flag);
         if (rv != SA_OK) {
                 err("Add board area failed");
+                wrap_g_free(local_inventory->comment);
+                wrap_g_free(local_inventory);
                 return rv;
         }
         if (add_success_flag != SAHPI_FALSE) {
@@ -3967,6 +4037,8 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
                                            &hpi_field);
                         if (rv != SA_OK) {
                                 err("Add idr field failed");
+                                wrap_g_free(local_inventory->comment);
+                                wrap_g_free(local_inventory);
                                 return rv;
                         }
 
@@ -3982,6 +4054,8 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
         rv = soap_getInterconnectTrayPortMap(con, &request, &portmap);
         if (rv != SOAP_OK) {
                 err("Get Interconnect tray port map failed");
+                wrap_g_free(local_inventory->comment);
+                wrap_g_free(local_inventory);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -3993,7 +4067,9 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
 			rv = asprintf(&tmp, "InterconnectTrayBay No. = %d",
 					portmap.interconnectTrayBayNumber);
 			if(rv == -1){
-				free(tmp);
+				wrap_free(tmp);
+                		wrap_g_free(local_inventory->comment);
+		      		wrap_g_free(local_inventory);
 				err("Failed to allocate memory for buffer to   \
 						hold InterconnectTrayBay No.");
 				return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -4006,14 +4082,16 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
                                            &hpi_field);
                         if (rv != SA_OK) {
                                 err("Add idr field failed");
-				free(tmp);
+                                wrap_free(tmp);
+                                wrap_g_free(local_inventory->comment);
+                                wrap_g_free(local_inventory);
                                 return rv;
                         }
 
                         /* Increment the field counter */
                         local_inventory->info.area_list->idr_area_head.
                         NumFields++;
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
                 }
 		if (portmap.status) {
@@ -4023,7 +4101,9 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
                         hpi_field.Type = SAHPI_IDR_FIELDTYPE_CUSTOM;
 			rv = asprintf(&tmp, "portMapStatus = %d",portmap.status);
 			if(rv == -1){
-				free(tmp);
+				wrap_free(tmp);
+                		wrap_g_free(local_inventory->comment);
+		      		wrap_g_free(local_inventory);
 				err("Failed to allocate memory for buffer to   \
 						hold portMapStatus");
 				return SA_ERR_HPI_OUT_OF_MEMORY;
@@ -4036,14 +4116,16 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
                                            &hpi_field);
                         if (rv != SA_OK) {
                                 err("Add idr field failed");
-				free(tmp);
+                                wrap_free(tmp);
+                                wrap_g_free(local_inventory->comment);
+                                wrap_g_free(local_inventory);
                                 return rv;
                         }
 
                         /* Increment the field counter */
                         local_inventory->info.area_list->idr_area_head.
                         NumFields++;
-			free(tmp);
+			wrap_free(tmp);
 			tmp = NULL;
                 }
 		/* Add interconnect tray size type*/
@@ -4073,6 +4155,8 @@ SaErrorT build_interconnect_inv_rdr(struct oh_handler_state *oh_handler,
                                            &hpi_field);
                         if (rv != SA_OK) {
                                 err("Add idr field failed");
+                                wrap_g_free(local_inventory->comment);
+                                wrap_g_free(local_inventory);
                                 return rv;
                         }
 
@@ -4200,6 +4284,8 @@ SaErrorT build_interconnect_inv_rdr_arr(struct oh_handler_state *oh_handler,
                               &add_success_flag);
         if (rv != SA_OK) {
                 err("Add product area failed");
+                wrap_g_free(local_inventory->comment);
+                wrap_g_free(local_inventory);
                 return rv;
         }
 
@@ -4225,6 +4311,8 @@ SaErrorT build_interconnect_inv_rdr_arr(struct oh_handler_state *oh_handler,
                             &add_success_flag);
         if (rv != SA_OK) {
                 err("Add board area failed");
+                wrap_g_free(local_inventory->comment);
+                wrap_g_free(local_inventory);
                 return rv;
         }
         if (add_success_flag != SAHPI_FALSE) {
@@ -4250,14 +4338,23 @@ SaErrorT build_interconnect_inv_rdr_arr(struct oh_handler_state *oh_handler,
                         hpi_field.AreaId = local_inventory->info.area_list->
                                            idr_area_head.AreaId;
                         hpi_field.Type = SAHPI_IDR_FIELDTYPE_PRODUCT_VERSION;
-                        strcpy ((char *)hpi_field.Field.Data,
-                                extra_data_info.value);
+                        if(strlen(extra_data_info.value) <
+                                        SAHPI_MAX_TEXT_BUFFER_LENGTH){
+                                strcpy ((char *)hpi_field.Field.Data,
+                                                extra_data_info.value);
+                        }else{
+                                err("The src string %s is bigger than the max "
+                                "buffer length %d",extra_data_info.value,
+                                           SAHPI_MAX_TEXT_BUFFER_LENGTH );
+                        }
 
                         rv = idr_field_add(&(local_inventory->info.area_list
                                            ->field_list),
                                            &hpi_field);
                         if (rv != SA_OK) {
                                 err("Add idr field failed");
+                                wrap_g_free(local_inventory->comment);
+                                wrap_g_free(local_inventory);
                                 return rv;
                         }
 
@@ -4278,27 +4375,37 @@ SaErrorT build_interconnect_inv_rdr_arr(struct oh_handler_state *oh_handler,
                         rv = asprintf(&tmp, "InterconnectTrayBay No. = %d",
                                         portmap->interconnectTrayBayNumber);
                         if(rv == -1){
-                                free(tmp);
                                 err("Failed to allocate memory for buffer to   \
                                                 hold InterconnectTrayBay No.");
+                                wrap_free(tmp);
+                                wrap_g_free(local_inventory->comment);
+                                wrap_g_free(local_inventory);
                                 return SA_ERR_HPI_OUT_OF_MEMORY;
                         }
-                        strcpy ((char *)hpi_field.Field.Data,
-                                tmp);
+                        if(strlen(tmp) < SAHPI_MAX_TEXT_BUFFER_LENGTH){
+                                strcpy ((char *)hpi_field.Field.Data,
+                                                tmp);
+                        }else{
+                                err("The src string %s is bigger than the max "
+                                        "buffer length %d", tmp,
+                                        SAHPI_MAX_TEXT_BUFFER_LENGTH );
+                        }
 
                         rv = idr_field_add(&(local_inventory->info.area_list
                                            ->field_list),
                                            &hpi_field);
                         if (rv != SA_OK) {
                                 err("Add idr field failed");
-                                free(tmp);
+                                wrap_free(tmp);
+                                wrap_g_free(local_inventory->comment);
+                                wrap_g_free(local_inventory);
                                 return rv;
                         }
 
                         /* Increment the field counter */
                         local_inventory->info.area_list->idr_area_head.
                         NumFields++;
-                        free(tmp);
+                        wrap_free(tmp);
                         tmp = NULL;
                 }
                 if (portmap->status) {
@@ -4308,27 +4415,38 @@ SaErrorT build_interconnect_inv_rdr_arr(struct oh_handler_state *oh_handler,
                         hpi_field.Type = SAHPI_IDR_FIELDTYPE_CUSTOM;
                         rv = asprintf(&tmp, "portMapStatus = %d",portmap->status);
                         if(rv == -1){
-                                free(tmp);
+                                wrap_free(tmp);
+                                wrap_g_free(local_inventory->comment);
+                                wrap_g_free(local_inventory);
                                 err("Failed to allocate memory for buffer to   \
                                                 hold portMapStatus");
                                 return SA_ERR_HPI_OUT_OF_MEMORY;
                         }
-                        strcpy ((char *)hpi_field.Field.Data,
-                                tmp);
 
+                        if(strlen(tmp) < SAHPI_MAX_TEXT_BUFFER_LENGTH){
+                                strcpy ((char *)hpi_field.Field.Data,
+                                                tmp);
+                        }else{
+                                err("The src string %s is bigger than the max "
+                                         "buffer length %d", tmp,
+                                         SAHPI_MAX_TEXT_BUFFER_LENGTH );
+			}
+			
                         rv = idr_field_add(&(local_inventory->info.area_list
                                            ->field_list),
                                            &hpi_field);
                         if (rv != SA_OK) {
                                 err("Add idr field failed");
-                                free(tmp);
+                                wrap_free(tmp);
+                                wrap_g_free(local_inventory->comment);
+                                wrap_g_free(local_inventory);
                                 return rv;
                         }
 
                         /* Increment the field counter */
                         local_inventory->info.area_list->idr_area_head.
                         NumFields++;
-                        free(tmp);
+                        wrap_free(tmp);
                         tmp = NULL;
                 }
                 /* Add interconnect tray size type*/
@@ -4358,6 +4476,8 @@ SaErrorT build_interconnect_inv_rdr_arr(struct oh_handler_state *oh_handler,
                                            &hpi_field);
                         if (rv != SA_OK) {
                                 err("Add idr field failed");
+                                wrap_g_free(local_inventory->comment);
+                                wrap_g_free(local_inventory);
                                 return rv;
                         }
 
@@ -4459,6 +4579,8 @@ SaErrorT build_fan_inv_rdr(struct oh_handler_state *oh_handler,
                               &add_success_flag);
         if (rv != SA_OK) {
                 err("Add product area failed");
+                wrap_g_free(local_inventory->comment);
+                wrap_g_free(local_inventory);
                 return rv;
         }
 
@@ -4483,6 +4605,8 @@ SaErrorT build_fan_inv_rdr(struct oh_handler_state *oh_handler,
                             &add_success_flag);
         if (rv != SA_OK) {
                 err("Add board area failed");
+                wrap_g_free(local_inventory->comment);
+                wrap_g_free(local_inventory);
                 return rv;
         }
         if (add_success_flag != SAHPI_FALSE) {
@@ -4607,6 +4731,8 @@ SaErrorT build_power_inv_rdr(struct oh_handler_state *oh_handler,
                               &add_success_flag);
         if (rv != SA_OK) {
                 err("Add product area failed");
+                wrap_g_free(local_inventory->comment);
+                wrap_g_free(local_inventory);
                 return rv;
         }
 
@@ -4631,6 +4757,8 @@ SaErrorT build_power_inv_rdr(struct oh_handler_state *oh_handler,
                             &add_success_flag);
         if (rv != SA_OK) {
                 err("Add board area failed");
+                wrap_g_free(local_inventory->comment);
+                wrap_g_free(local_inventory);
                 return rv;
         }
         if (add_success_flag != SAHPI_FALSE) {
@@ -4718,6 +4846,7 @@ SaErrorT add_product_area(struct oa_soap_area **area,
                                    &hpi_field);
                 if (rv != SA_OK) {
                         err("Add idr field failed");
+                        wrap_g_free(local_area);
                         return rv;
                 }
                 ++field_count;
@@ -4743,6 +4872,7 @@ SaErrorT add_product_area(struct oa_soap_area **area,
                                    &hpi_field);
                 if (rv != SA_OK) {
                         err("Add idr field failed");
+                        wrap_g_free(local_area);
                         return rv;
                 }
                 ++field_count;
@@ -4828,6 +4958,7 @@ SaErrorT add_chassis_area(struct oa_soap_area **area,
                                    &hpi_field);
                 if (rv != SA_OK) {
                         err("Add idr field failed");
+                        wrap_g_free(local_area);
                         return rv;
                 }
                 ++field_count;
@@ -4847,6 +4978,7 @@ SaErrorT add_chassis_area(struct oa_soap_area **area,
                                    &hpi_field);
                 if (rv != SA_OK) {
                         err("Add idr field failed");
+                        wrap_g_free(local_area);
                         return rv;
                 }
                 ++field_count;
@@ -4933,6 +5065,7 @@ SaErrorT add_board_area(struct oa_soap_area **area,
                                    &hpi_field);
                 if (rv != SA_OK) {
                         err("Add idr field failed");
+                        wrap_g_free(local_area);
                         return rv;
                 }
                 ++field_count;
@@ -4951,6 +5084,7 @@ SaErrorT add_board_area(struct oa_soap_area **area,
                                    &hpi_field);
                 if (rv != SA_OK) {
                         err("Add idr field failed");
+                        wrap_g_free(local_area);
                         return rv;
                 }
                 ++field_count;
@@ -5042,6 +5176,7 @@ SaErrorT add_internal_area(struct oa_soap_area **area,
                                    &hpi_field);
                 if (rv != SA_OK) {
                         err("Add idr field failed");
+                        wrap_g_free(local_area);
                         return rv;
                 }
                 ++field_count;
@@ -5062,6 +5197,7 @@ SaErrorT add_internal_area(struct oa_soap_area **area,
                                    &hpi_field);
                 if (rv != SA_OK) {
                         err("Add idr field failed");
+                        wrap_g_free(local_area);
                         return rv;
                 }
                 ++field_count;
@@ -5082,6 +5218,7 @@ SaErrorT add_internal_area(struct oa_soap_area **area,
                                    &hpi_field);
                 if (rv != SA_OK) {
                         err("Add idr field failed");
+                        wrap_g_free(local_area);
                         return rv;
                 }
                 ++field_count;
@@ -5103,6 +5240,7 @@ SaErrorT add_internal_area(struct oa_soap_area **area,
                                    &hpi_field);
                 if (rv != SA_OK) {
                         err("Add idr field failed");
+                        wrap_g_free(local_area);
                         return rv;
                 }
                 ++field_count;

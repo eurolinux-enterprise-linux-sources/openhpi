@@ -88,13 +88,13 @@ SaErrorT process_server_power_on_event(struct oh_handler_state *oh_handler,
 {
 	SaErrorT rv = SA_OK;
 	struct oh_event event = {0};
-	struct ov_rest_hotswap_state *hotswap_state = NULL;
+	struct ovRestHotswapState *hotswap_state = NULL;
 	struct ov_rest_handler *ov_handler = NULL;
 	struct serverhardwareInfoArrayResponse response = {0};
 	struct serverhardwareInfo info_result = {0};
 	struct enclosureInfoArrayResponse enclosure_response = {0};
 	struct enclosureInfo enclosure_result = {{0}};
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	char* enclosure_doc = NULL, *server_doc = NULL;
 	SaHpiRptEntryT *rpt = NULL;
 
@@ -104,7 +104,7 @@ SaErrorT process_server_power_on_event(struct oh_handler_state *oh_handler,
 		return SA_ERR_HPI_INVALID_PARAMS;
 	}
 	ov_handler = (struct ov_rest_handler *)oh_handler->data;
-	asprintf (&ov_handler->connection->url, "https://%s%s", 
+	WRAP_ASPRINTF (&ov_handler->connection->url, "https://%s%s", 
 			ov_handler->connection->hostname,
 			ov_event->resourceUri);
 	rv = ov_rest_getserverInfoArray(oh_handler, &response,
@@ -117,7 +117,7 @@ SaErrorT process_server_power_on_event(struct oh_handler_state *oh_handler,
 	ov_rest_json_parse_server (response.server_array, &info_result);
 	ov_rest_wrap_json_object_put(response.root_jobj);
 	/* Now we have to get the enclosure serial number*/
-	asprintf (&ov_handler->connection->url, "https://%s%s", 
+	WRAP_ASPRINTF (&ov_handler->connection->url, "https://%s%s", 
 			ov_handler->connection->hostname,
 			info_result.locationUri);
 	rv = ov_rest_getenclosureInfoArray(oh_handler, &enclosure_response,
@@ -132,17 +132,18 @@ SaErrorT process_server_power_on_event(struct oh_handler_state *oh_handler,
 	/* Find the server Resourceid by looking at the enclosure linked list*/
 	/* FIXME : We could make below code as a funtion to get the resource id
 	 * by using enclosure serial number */
-	enclosure = (struct enclosure_status *)ov_handler->
+	enclosure = (struct enclosureStatus *)ov_handler->
 		ov_rest_resources.enclosure;
 	while(enclosure != NULL){
-		if(!strcmp(enclosure->serial_number,
+		if(!strcmp(enclosure->serialNumber,
 					enclosure_result.serialNumber)){
 			break;
 		}
 		enclosure = enclosure->next;
 	}
 	if(enclosure == NULL){
-		CRIT("Enclosure data of the server is unavailable");
+		CRIT("Enclosure data of the server in bay %d is unavailable",
+			info_result.bayNumber);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(server_doc);
 		return SA_ERR_HPI_INVALID_RESOURCE;
@@ -151,22 +152,22 @@ SaErrorT process_server_power_on_event(struct oh_handler_state *oh_handler,
 	rpt = oh_get_resource_by_id(oh_handler->rptcache, 
 		enclosure->server.resource_id[info_result.bayNumber - 1]);
 	if (rpt == NULL) {
-		err("resource RPT is NULL for server blade in bay %d," 
-				"in enclosure rid %d", info_result.bayNumber, 
+		err("RPT is NULL for server blade in bay %d," 
+				"in enclosure rid %d", info_result.bayNumber,
 						enclosure->enclosure_rid);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(server_doc);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 
-	hotswap_state = (struct ov_rest_hotswap_state *)
+	hotswap_state = (struct ovRestHotswapState *)
 		oh_get_resource_data (oh_handler->rptcache, 
 				enclosure->server.
 				resource_id[info_result.bayNumber - 1]);
 	if (hotswap_state == NULL)
 	{
 		err ("Failed to get hotswap state of server blade in bay %d, "
-				"in enclosure rid %d", info_result.bayNumber, 
+				"in enclosure rid %d", info_result.bayNumber,
 						enclosure->enclosure_rid);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(server_doc);
@@ -267,13 +268,13 @@ SaErrorT process_server_power_off_event(struct oh_handler_state *oh_handler,
 {
 	SaErrorT rv = SA_OK;
 	struct oh_event event = {0};
-	struct ov_rest_hotswap_state *hotswap_state = NULL;
+	struct ovRestHotswapState *hotswap_state = NULL;
 	struct ov_rest_handler *ov_handler = NULL;
 	struct serverhardwareInfoArrayResponse response = {0};
 	struct serverhardwareInfo info_result = {0};
 	struct enclosureInfoArrayResponse enclosure_response = {0};
 	struct enclosureInfo enclosure_result = {{0}};
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	char* enclosure_doc = NULL, *server_doc = NULL;
 	SaHpiRptEntryT *rpt = NULL;
 
@@ -283,7 +284,7 @@ SaErrorT process_server_power_off_event(struct oh_handler_state *oh_handler,
 		return SA_ERR_HPI_INVALID_PARAMS;
 	}
 	ov_handler = (struct ov_rest_handler *)oh_handler->data;
-	asprintf (&ov_handler->connection->url, "https://%s%s", 
+	WRAP_ASPRINTF (&ov_handler->connection->url, "https://%s%s", 
 			ov_handler->connection->hostname,
 			ov_event->resourceUri);
 	rv = ov_rest_getserverInfoArray(oh_handler, &response,
@@ -296,7 +297,7 @@ SaErrorT process_server_power_off_event(struct oh_handler_state *oh_handler,
 	ov_rest_json_parse_server (response.server_array, &info_result);
 	ov_rest_wrap_json_object_put(response.root_jobj);
 	/* Now we have to get the enclosure serial number*/
-	asprintf (&ov_handler->connection->url, "https://%s%s", 
+	WRAP_ASPRINTF (&ov_handler->connection->url, "https://%s%s", 
 			ov_handler->connection->hostname,
 			info_result.locationUri);
 	rv = ov_rest_getenclosureInfoArray(oh_handler, &enclosure_response,
@@ -311,30 +312,31 @@ SaErrorT process_server_power_off_event(struct oh_handler_state *oh_handler,
 	/* Find the server Resourceid by looking at the enclosure linked list*/
 	/* FIXME : We could make below code as a funtion to get the resource id
 	 * by using enclosure serial number */
-	enclosure = (struct enclosure_status *)ov_handler->
+	enclosure = (struct enclosureStatus *)ov_handler->
 		ov_rest_resources.enclosure;
 	while(enclosure != NULL){
-		if(!strcmp(enclosure->serial_number,
+		if(!strcmp(enclosure->serialNumber,
 					enclosure_result.serialNumber)){
 			break;
 		}
 		enclosure = enclosure->next;
 	}
 	if(enclosure == NULL){
-		CRIT("Enclosure data of the server is unavailable");
+		CRIT("Enclosure data of the server in bay %d is unavailable",
+			info_result.bayNumber);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(server_doc);
 		return SA_ERR_HPI_INVALID_RESOURCE;
 	}
 
-	hotswap_state = (struct ov_rest_hotswap_state *)
+	hotswap_state = (struct ovRestHotswapState *)
 		oh_get_resource_data (oh_handler->rptcache,
 				enclosure->
 				server.resource_id[info_result.bayNumber - 1]);
 	if (hotswap_state == NULL)
 	{
 		err ("Failed to get hotswap state of server blade in bay %d, "
-				"in enclosure rid %d", info_result.bayNumber, 
+				"in enclosure rid %d", info_result.bayNumber,
 						enclosure->enclosure_rid);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(server_doc);
@@ -345,7 +347,7 @@ SaErrorT process_server_power_off_event(struct oh_handler_state *oh_handler,
 			enclosure->
 			server.resource_id[info_result.bayNumber - 1]);
 	if (rpt == NULL) {
-		err("resource RPT is NULL");
+		err("RPT is NULL for server in bay %d", info_result.bayNumber);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(server_doc);
 		return SA_ERR_HPI_INTERNAL_ERROR;
@@ -417,13 +419,13 @@ SaErrorT process_server_reset_event(struct oh_handler_state *oh_handler,
 {
 	SaErrorT rv = SA_OK;
 	struct oh_event event = {0};
-	struct ov_rest_hotswap_state *hotswap_state = NULL;
+	struct ovRestHotswapState *hotswap_state = NULL;
 	struct ov_rest_handler *ov_handler = NULL;
 	struct serverhardwareInfoArrayResponse response = {0};
 	struct serverhardwareInfo info_result = {0};
 	struct enclosureInfoArrayResponse enclosure_response = {0};
 	struct enclosureInfo enclosure_result = {{0}};
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	char* enclosure_doc = NULL, *server_doc = NULL;
 	SaHpiRptEntryT *rpt = NULL;
 
@@ -433,7 +435,7 @@ SaErrorT process_server_reset_event(struct oh_handler_state *oh_handler,
 		return SA_ERR_HPI_INVALID_PARAMS;
 	}
 	ov_handler = (struct ov_rest_handler *)oh_handler->data;
-	asprintf (&ov_handler->connection->url, "https://%s%s", 
+	WRAP_ASPRINTF (&ov_handler->connection->url, "https://%s%s", 
 			ov_handler->connection->hostname,
 			ov_event->resourceUri);
 	rv = ov_rest_getserverInfoArray(oh_handler, &response,
@@ -445,7 +447,7 @@ SaErrorT process_server_reset_event(struct oh_handler_state *oh_handler,
 	/* Parse the Server json response*/
 	ov_rest_json_parse_server (response.server_array, &info_result);
 	/* Now we have to get the enclosure serial number*/
-	asprintf (&ov_handler->connection->url, "https://%s%s", 
+	WRAP_ASPRINTF (&ov_handler->connection->url, "https://%s%s", 
 			ov_handler->connection->hostname,
 			info_result.locationUri);
 	rv = ov_rest_getenclosureInfoArray(oh_handler, &enclosure_response,
@@ -460,30 +462,31 @@ SaErrorT process_server_reset_event(struct oh_handler_state *oh_handler,
 	/* Find the server Resourceid by looking at the enclosure linked list*/
 	/* FIXME : We could make below code as a funtion to get the resource id
 	 * by using enclosure serial number */
-	enclosure = (struct enclosure_status *)ov_handler->
+	enclosure = (struct enclosureStatus *)ov_handler->
 		ov_rest_resources.enclosure;
 	while(enclosure != NULL){
-		if(!strcmp(enclosure->serial_number,
+		if(!strcmp(enclosure->serialNumber,
 					enclosure_result.serialNumber)){
 			break;
 		}
 		enclosure = enclosure->next;
 	}
 	if(enclosure == NULL){
-		CRIT("Enclosure data of the server is unavailable");
+		CRIT("Enclosure data of the server in bay %d is unavailable",
+			info_result.bayNumber);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(server_doc);
 		return SA_ERR_HPI_INVALID_RESOURCE;
 	}
 
-	hotswap_state = (struct ov_rest_hotswap_state *)
+	hotswap_state = (struct ovRestHotswapState *)
 		oh_get_resource_data (oh_handler->rptcache,
 				enclosure->server.
 				resource_id[info_result.bayNumber - 1]);
 	if (hotswap_state == NULL)
 	{
 		err ("Failed to get hotswap state of server blade in bay %d, "
-				"in enclosure rid %d", info_result.bayNumber, 
+				"in enclosure rid %d", info_result.bayNumber,
 						enclosure->enclosure_rid);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(server_doc);
@@ -494,7 +497,7 @@ SaErrorT process_server_reset_event(struct oh_handler_state *oh_handler,
 			enclosure->server.
 			resource_id[info_result.bayNumber - 1]);
 	if (rpt == NULL) {
-		err("resource RPT is NULL");
+		err("RPT is NULL for server in bay %d", info_result.bayNumber);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(server_doc);
 		return SA_ERR_HPI_INTERNAL_ERROR;
@@ -546,7 +549,7 @@ SaErrorT build_inserted_server_rpt(struct oh_handler_state *oh_handler,
                                    SaHpiRptEntryT *rpt)
 {
 	SaErrorT rv = SA_OK;
-	struct ov_rest_hotswap_state *hotswap_state = NULL;
+	struct ovRestHotswapState *hotswap_state = NULL;
 
 	if (oh_handler == NULL || response == NULL || rpt == NULL) {
 		err("invalid parameters");
@@ -554,15 +557,17 @@ SaErrorT build_inserted_server_rpt(struct oh_handler_state *oh_handler,
 	}
 
 	if (ov_rest_build_server_rpt(oh_handler, response, rpt) != SA_OK) {
-		err("Building Server RPT failed for an inserted blade");
+		err("Building Server RPT failed for inserted blade in bay %d",
+							response->bayNumber);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 
 	if (rpt->ResourceCapabilities & SAHPI_CAPABILITY_MANAGED_HOTSWAP) {
-		hotswap_state = (struct ov_rest_hotswap_state *)
-			g_malloc0(sizeof(struct ov_rest_hotswap_state));
+		hotswap_state = (struct ovRestHotswapState *)
+			g_malloc0(sizeof(struct ovRestHotswapState));
 		if (hotswap_state == NULL) {
-			err("Out of memory");
+			err("Out of memory for server blade in bay %d",
+							response->bayNumber);
 			return SA_ERR_HPI_OUT_OF_MEMORY;
 		}
 		/* Inserted server needs some time to stabilize.  Put the
@@ -576,7 +581,7 @@ SaErrorT build_inserted_server_rpt(struct oh_handler_state *oh_handler,
 
 	rv = oh_add_resource(oh_handler->rptcache, rpt, hotswap_state, 0);
 	if (rv != SA_OK) {
-		err("Failed to add Server rpt");
+		err("Failed to add Server rpt in bay %d", response->bayNumber);
 		wrap_g_free(hotswap_state);
 		return rv;
 	}
@@ -620,7 +625,7 @@ SaErrorT build_inserted_server_rdr(struct oh_handler_state *oh_handler,
 
 	rpt = oh_get_resource_by_id (oh_handler->rptcache, resource_id);
 	if (rpt == NULL) {
-		err("INVALID RESOURCE");
+		err("RPT is NULL for server in bay %d", response->bayNumber);
 		return SA_ERR_HPI_INVALID_RESOURCE;
 	}
 
@@ -634,7 +639,8 @@ SaErrorT build_inserted_server_rdr(struct oh_handler_state *oh_handler,
 	}
 	rv = oh_add_rdr(oh_handler->rptcache, resource_id, &rdr, inventory, 0);
 	if (rv != SA_OK) {
-		err("Failed to add rdr");
+		err("Failed to add rdr for server in bay %d",
+						response->bayNumber);
 		return rv;
 	}
 
@@ -701,7 +707,7 @@ SaErrorT ov_rest_proc_blade_inserted( struct oh_handler_state *oh_handler,
 	struct enclosureStatusResponse enclosure_response = {0};
 	struct enclosureInfo enclosure_result = {{0}};
 	char *server_doc = NULL, *enclosure_doc = NULL;
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	json_object *jvalue = NULL;
 	char *blade_name = NULL;
 	int bayNumber;
@@ -714,7 +720,7 @@ SaErrorT ov_rest_proc_blade_inserted( struct oh_handler_state *oh_handler,
 	}
 	bayNumber = ov_rest_get_baynumber(event->resourceID);
 
-	asprintf (&ov_handler->connection->url, "https://%s%s",
+	WRAP_ASPRINTF (&ov_handler->connection->url, "https://%s%s",
 			ov_handler->connection->hostname,
 			event->resourceUri);
 	rv = ov_rest_getenclosureStatus(oh_handler, &enclosure_response,
@@ -749,16 +755,18 @@ SaErrorT ov_rest_proc_blade_inserted( struct oh_handler_state *oh_handler,
 	ov_rest_json_parse_server (jvalue, &info_result);
 	ov_rest_wrap_json_object_put(enclosure_response.root_jobj);
 	if(info_result.uri == NULL){
-		err("Inserted Blade Resource URI is NULL");
+		err("Resource URI is NULL for inserted server blade in bay %d",
+							bayNumber);
 		return SA_ERR_HPI_INVALID_RESOURCE;
 	}
-	asprintf(&ov_handler->connection->url, "https://%s%s",
+	WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
 			ov_handler->connection->hostname,
 			info_result.uri);
 	rv = ov_rest_getserverInfoArray(oh_handler, &response,
 			ov_handler->connection, server_doc);
 	if (rv != SA_OK || response.server_array == NULL) {
-		CRIT("No response from ov_rest_getserverInfoArray");
+		CRIT("No response from ov_rest_getserverInfoArray for "
+			"server blade in bay %d", bayNumber);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 	ov_rest_json_parse_server(response.server_array, &info_result);
@@ -773,17 +781,18 @@ SaErrorT ov_rest_proc_blade_inserted( struct oh_handler_state *oh_handler,
 	rv = build_discovered_server_rpt(oh_handler, &info_result, 
 					&resource_id);
 	if (rv != SA_OK) {
-		err("build inserted server rpt failed");
+		err("Build rpt failed for inserted server blade in bay %d",
+							bayNumber);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(server_doc);
 		return rv;
 	}
-	/* Update resource_status structure with resource_id,
-	 * serial_number, and presence status
+	/* Update resource_info structure with resource_id,
+	 * serialNumber, and presence status
 	 */
 	enclosure = ov_handler->ov_rest_resources.enclosure;
 	while(enclosure != NULL){
-		if(strstr(enclosure->serial_number,
+		if(strstr(enclosure->serialNumber,
 				enclosure_result.serialNumber)){
 			ov_rest_update_resource_status (&enclosure->server,
 					info_result.bayNumber,
@@ -807,15 +816,16 @@ SaErrorT ov_rest_proc_blade_inserted( struct oh_handler_state *oh_handler,
 	rv = build_inserted_server_rdr(oh_handler, resource_id,
 			&info_result, TRUE);
 	if (rv != SA_OK) {
-		err("build inserted server RDR failed");
+		err("Build RDR failed for inserted server blade in bay %d",
+							bayNumber);
 		/* Free the inventory info from inventory RDR */
 		rv = ov_rest_free_inventory_info(oh_handler, resource_id);
 		if (rv != SA_OK) {
-			err("Inventory cleanup failed for resource id %d",
+			err("Inventory cleanup failed for server id %d",
 					resource_id);
 		}
 		oh_remove_resource(oh_handler->rptcache, resource_id);
-		/* reset resource_status structure to default values */
+		/* reset resource_info structure to default values */
 		ov_rest_update_resource_status(
 				&enclosure->server, bayNumber,
 				"", SAHPI_UNSPECIFIED_RESOURCE_ID, 
@@ -827,7 +837,8 @@ SaErrorT ov_rest_proc_blade_inserted( struct oh_handler_state *oh_handler,
 	rv = ov_rest_populate_event(oh_handler, resource_id, &hs_event,
 			&asserted_sensors);
 	if (rv != SA_OK) {
-		err("Populating event struct failed");
+		err("Populating event struct failed for server in bay %d",
+								bayNumber);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(server_doc);
 		return SA_ERR_HPI_INTERNAL_ERROR;
@@ -835,7 +846,7 @@ SaErrorT ov_rest_proc_blade_inserted( struct oh_handler_state *oh_handler,
 	
 	rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
 	if (rpt == NULL) {
-		err("resource RPT is NULL");
+		err("RPT is NULL for server in bay %d", bayNumber);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 	hs_event.event.EventType = SAHPI_ET_HOTSWAP;
@@ -896,7 +907,7 @@ SaErrorT ov_rest_proc_blade_add_complete( struct oh_handler_state *oh_handler,
         struct serverhardwareInfoArrayResponse response = {0};
         struct serverhardwareInfo info_result = {0};
         char *server_doc = NULL;
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
         GSList *asserted_sensors = NULL;
 
         if (oh_handler == NULL || event == NULL) {
@@ -905,13 +916,13 @@ SaErrorT ov_rest_proc_blade_add_complete( struct oh_handler_state *oh_handler,
         }
 
         if (event->resourceUri == NULL) {
-                err ("resourceUri is NULL, failed to add the server blade");
+                err ("Resource uri is NULL, failed to add the server blade");
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
         ov_handler = (struct ov_rest_handler *)oh_handler->data;
 	enclosure = ov_handler->ov_rest_resources.enclosure;
-        asprintf(&ov_handler->connection->url, "https://%s%s",
+        WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
                         ov_handler->connection->hostname,
                         event->resourceUri);
         rv = ov_rest_getserverInfoArray(oh_handler, &response,
@@ -927,7 +938,8 @@ SaErrorT ov_rest_proc_blade_add_complete( struct oh_handler_state *oh_handler,
 	rv = build_discovered_server_rpt(oh_handler, &info_result, 
 					&resource_id);
         if (rv != SA_OK) {
-                err("build inserted server rpt failed");
+                err("Build rpt failed for inserted server in bay %d",
+						info_result.bayNumber);
                 wrap_g_free(server_doc);
                 return rv;
         }
@@ -936,11 +948,11 @@ SaErrorT ov_rest_proc_blade_add_complete( struct oh_handler_state *oh_handler,
         rv = build_inserted_server_rdr(oh_handler, resource_id,
                         &info_result, TRUE);
         if (rv != SA_OK) {
-                err("build inserted server RDR failed");
+                err("Build RDR failed for inserted server id %d", resource_id);
                 /* Free the inventory info from inventory RDR */
                 rv = ov_rest_free_inventory_info(oh_handler, resource_id);
                 if (rv != SA_OK) {
-                        err("Inventory cleanup failed for resource id %d",
+                        err("Inventory cleanup failed for server id %d",
                                         resource_id);
                 }
                 oh_remove_resource(oh_handler->rptcache, resource_id);
@@ -949,7 +961,7 @@ SaErrorT ov_rest_proc_blade_add_complete( struct oh_handler_state *oh_handler,
         }
 	while(enclosure != NULL){
 		if(strstr(info_result.locationUri,
-					enclosure->serial_number)){
+					enclosure->serialNumber)){
 			ov_rest_update_resource_status(&enclosure->server,
 					info_result.bayNumber,
 					info_result.serialNumber,
@@ -962,7 +974,8 @@ SaErrorT ov_rest_proc_blade_add_complete( struct oh_handler_state *oh_handler,
         rv = ov_rest_populate_event(oh_handler, resource_id, &hs_event,
                         &asserted_sensors);
         if (rv != SA_OK) {
-                err("Populating event struct failed");
+                err("Populating event struct failed for server id %d",
+								resource_id);
                 wrap_g_free(server_doc);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
@@ -1015,10 +1028,10 @@ SaErrorT ov_rest_proc_blade_add_complete( struct oh_handler_state *oh_handler,
  **/
 SaErrorT remove_server_blade(struct oh_handler_state *oh_handler,
                                 SaHpiInt32T bay_number,
-                                struct enclosure_status *enclosure)
+                                struct enclosureStatus *enclosure)
 {
 	SaErrorT rv = SA_OK;
-	struct ov_rest_hotswap_state *hotswap_state = NULL;
+	struct ovRestHotswapState *hotswap_state = NULL;
 	SaHpiRptEntryT *rpt = NULL;
 	struct oh_event event = {0};
 	SaHpiResourceIdT resource_id;
@@ -1034,7 +1047,7 @@ SaErrorT remove_server_blade(struct oh_handler_state *oh_handler,
 	/* Get the rpt entry of the resource */
 	rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
 	if (rpt == NULL) {
-		err("resource RPT is NULL");
+		err("RPT is NULL for server blade in bay %d", bay_number);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 
@@ -1051,11 +1064,12 @@ SaErrorT remove_server_blade(struct oh_handler_state *oh_handler,
 			SAHPI_HS_STATE_ACTIVE;
 	} else {
 		/* Managed hotswap */
-		hotswap_state = (struct ov_rest_hotswap_state *)
+		hotswap_state = (struct ovRestHotswapState *)
 			oh_get_resource_data(oh_handler->rptcache,
 					event.resource.ResourceId);
 		if (hotswap_state == NULL) {
-			err("Failed to get hotswap state of server blade");
+			err("Failed to get hotswap state of server blade "
+				"in bay %d", bay_number);
 			event.event.EventDataUnion.HotSwapEvent.
 				PreviousHotSwapState = SAHPI_HS_STATE_INACTIVE;
 		} else {
@@ -1086,14 +1100,14 @@ SaErrorT remove_server_blade(struct oh_handler_state *oh_handler,
 	/* Free the inventory info from inventory RDR */
 	rv = ov_rest_free_inventory_info(oh_handler, rpt->ResourceId);
 	if (rv != SA_OK) {
-		err("Inventory cleanup failed for resource id %d",
+		err("Inventory cleanup failed for server id %d",
 				rpt->ResourceId);
 	}
 	/* Remove the resource from plugin RPTable */
 	rv = oh_remove_resource(oh_handler->rptcache,
 				rpt->ResourceId);
 
-	/* reset resource_status structure to default values */
+	/* reset resource_info structure to default values */
 	ov_rest_update_resource_status(
 			&enclosure->server, bay_number,
 			"", SAHPI_UNSPECIFIED_RESOURCE_ID, 
@@ -1124,7 +1138,7 @@ SaErrorT ov_rest_proc_blade_removed( struct oh_handler_state *handler,
 	struct enclosureStatusResponse enclosure_response = {0};
 	struct enclosureDeviceBays result = {0};
 	struct enclosureInfo enc_info = {{0}};
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	int bayNumber = 0;
 	char *enclosure_doc = NULL;
 	json_object * jvalue = NULL;
@@ -1136,7 +1150,7 @@ SaErrorT ov_rest_proc_blade_removed( struct oh_handler_state *handler,
 	}
 	bayNumber = ov_rest_get_baynumber(event->resourceID);
 
-	asprintf (&ov_handler->connection->url,"https://%s%s" ,
+	WRAP_ASPRINTF (&ov_handler->connection->url,"https://%s%s" ,
 			ov_handler->connection->hostname,event->resourceUri);
 	rv = ov_rest_getenclosureStatus(handler, &enclosure_response,
 			ov_handler->connection, enclosure_doc);
@@ -1166,13 +1180,14 @@ SaErrorT ov_rest_proc_blade_removed( struct oh_handler_state *handler,
 	ov_rest_wrap_json_object_put(enclosure_response.root_jobj);
 	enclosure = ov_handler->ov_rest_resources.enclosure;
 	while(enclosure != NULL){
-		if(strstr(enclosure->serial_number,enc_info.serialNumber)){
+		if(strstr(enclosure->serialNumber,enc_info.serialNumber)){
 			break;
 		}
 		enclosure = enclosure->next;
 	}
 	if(enclosure == NULL){
-		CRIT("Enclosure is not identified to remove the blade");
+		CRIT("Enclosure is not identified to remove blade in bay %d",
+			bayNumber);
 		wrap_g_free(enclosure_doc);
 		return SA_ERR_HPI_INVALID_RESOURCE;
 	}
@@ -1224,7 +1239,7 @@ SaErrorT ov_rest_proc_server_status(struct oh_handler_state *oh_handler,
         struct serverhardwareInfo info_result = {0};
         struct enclosureInfoArrayResponse enclosure_response = {0};
         struct enclosureInfo enclosure_result = {{0}};
-        struct enclosure_status *enclosure = NULL;
+        struct enclosureStatus *enclosure = NULL;
         char* enclosure_doc = NULL, *server_doc = NULL;
         SaHpiRptEntryT *rpt = NULL;
 
@@ -1234,7 +1249,7 @@ SaErrorT ov_rest_proc_server_status(struct oh_handler_state *oh_handler,
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
         ov_handler = (struct ov_rest_handler *)oh_handler->data;
-        asprintf (&ov_handler->connection->url, "https://%s%s",
+        WRAP_ASPRINTF (&ov_handler->connection->url, "https://%s%s",
                         ov_handler->connection->hostname,
                         ov_event->resourceUri);
         rv = ov_rest_getserverInfoArray(oh_handler, &response,
@@ -1247,7 +1262,7 @@ SaErrorT ov_rest_proc_server_status(struct oh_handler_state *oh_handler,
         ov_rest_json_parse_server (response.server_array, &info_result);
 	ov_rest_wrap_json_object_put(response.root_jobj);
         /* Now we have to get the enclosure serial number*/
-        asprintf (&ov_handler->connection->url, "https://%s%s",
+        WRAP_ASPRINTF (&ov_handler->connection->url, "https://%s%s",
                         ov_handler->connection->hostname,
                         info_result.locationUri);
         rv = ov_rest_getenclosureInfoArray(oh_handler, &enclosure_response,
@@ -1262,10 +1277,10 @@ SaErrorT ov_rest_proc_server_status(struct oh_handler_state *oh_handler,
         /* Find the server Resourceid by looking at the enclosure linked list*/
         /* FIXME : We could make below code as a funtion to get the resource id
          * by using enclosure serial number */
-        enclosure = (struct enclosure_status *)ov_handler->
+        enclosure = (struct enclosureStatus *)ov_handler->
                 ov_rest_resources.enclosure;
         while(enclosure != NULL){
-                if(!strcmp(enclosure->serial_number,
+                if(!strcmp(enclosure->serialNumber,
                                         enclosure_result.serialNumber)){
                         break;
                 }
@@ -1328,13 +1343,13 @@ SaErrorT process_drive_enclosure_power_on_event(
 {
 	SaErrorT rv = SA_OK;
 	struct oh_event event = {0};
-	struct ov_rest_hotswap_state *hotswap_state = NULL;
+	struct ovRestHotswapState *hotswap_state = NULL;
 	struct ov_rest_handler *ov_handler = NULL;
 	struct driveEnclosureInfoArrayResponse response = {0};
 	struct driveEnclosureInfo info_result = {0};
 	struct enclosureInfoArrayResponse enclosure_response = {0};
 	struct enclosureInfo enclosure_result = {{0}};
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	char* enclosure_doc = NULL, *drive_enc_doc = NULL;
 	SaHpiRptEntryT *rpt = NULL;
 
@@ -1345,7 +1360,7 @@ SaErrorT process_drive_enclosure_power_on_event(
 	}
 
 	ov_handler = (struct ov_rest_handler *)oh_handler->data;
-	asprintf (&ov_handler->connection->url, "https://%s%s", 
+	WRAP_ASPRINTF (&ov_handler->connection->url, "https://%s%s", 
 			ov_handler->connection->hostname,
 			ov_event->resourceUri);
 	rv = ov_rest_getdriveEnclosureInfoArray(oh_handler, &response,
@@ -1359,7 +1374,7 @@ SaErrorT process_drive_enclosure_power_on_event(
 			&info_result);
 	ov_rest_wrap_json_object_put(response.root_jobj);
 	/* Now we have to get the enclosure serial number*/
-	asprintf (&ov_handler->connection->url, "https://%s%s", 
+	WRAP_ASPRINTF (&ov_handler->connection->url, "https://%s%s", 
 			ov_handler->connection->hostname,
 			info_result.locationUri);
 	rv = ov_rest_getenclosureInfoArray(oh_handler, &enclosure_response,
@@ -1375,17 +1390,18 @@ SaErrorT process_drive_enclosure_power_on_event(
 	 * linked list*/
 	/* FIXME : We could make below code as a funtion to get the resource id
 	 * by using enclosure serial number */
-	enclosure = (struct enclosure_status *)ov_handler->
+	enclosure = (struct enclosureStatus *)ov_handler->
 		ov_rest_resources.enclosure;
 	while(enclosure != NULL){
-		if(!strcmp(enclosure->serial_number,
+		if(!strcmp(enclosure->serialNumber,
 					enclosure_result.serialNumber)){
 			break;
 		}
 		enclosure = enclosure->next;
 	}
 	if(enclosure == NULL){
-		CRIT("Enclosure data of the drive enclosure is unavailable");
+		CRIT("Enclosure data of the drive enclosure in bay %d"
+			" is unavailable", info_result.bayNumber);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(drive_enc_doc);
 		return SA_ERR_HPI_INVALID_RESOURCE;
@@ -1395,21 +1411,21 @@ SaErrorT process_drive_enclosure_power_on_event(
 			enclosure->server.
 			resource_id[info_result.bayNumber - 1]);
 	if (rpt == NULL) {
-		err("resource RPT is NULL for drive enclosure in bay %d", 
+		err("RPT is NULL for drive enclosure in bay %d", 
 						info_result.bayNumber);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(drive_enc_doc);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 
-	hotswap_state = (struct ov_rest_hotswap_state *)
+	hotswap_state = (struct ovRestHotswapState *)
 		oh_get_resource_data (oh_handler->rptcache, 
 				enclosure->server.
 				resource_id[info_result.bayNumber - 1]);
 	if (hotswap_state == NULL)
 	{
 		err ("Failed to get hotswap state of server blade in bay %d, "
-				"in enclosure rid %d", info_result.bayNumber, 
+				"in enclosure rid %d", info_result.bayNumber,
 						enclosure->enclosure_rid);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(drive_enc_doc);
@@ -1477,7 +1493,9 @@ SaErrorT process_drive_enclosure_power_on_event(
 			break;
 
 		default:
-			err ("wrong state detected");
+			err ("Wrong hotswap state %d detected for server blade "
+				"in bay %d", hotswap_state->currentHsState,
+						info_result.bayNumber);
 			wrap_g_free(enclosure_doc);
 			wrap_g_free(drive_enc_doc);
 			return SA_ERR_HPI_INTERNAL_ERROR;
@@ -1510,13 +1528,13 @@ SaErrorT process_drive_enclosure_power_off_event(
 {
 	SaErrorT rv = SA_OK;
 	struct oh_event event = {0};
-	struct ov_rest_hotswap_state *hotswap_state = NULL;
+	struct ovRestHotswapState *hotswap_state = NULL;
 	struct ov_rest_handler *ov_handler = NULL;
 	struct driveEnclosureInfoArrayResponse response = {0};
 	struct driveEnclosureInfo info_result = {0};
 	struct enclosureInfoArrayResponse enclosure_response = {0};
 	struct enclosureInfo enclosure_result = {{0}};
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	char* enclosure_doc = NULL, *drive_enc_doc = NULL;
 	SaHpiRptEntryT *rpt = NULL;
 
@@ -1527,7 +1545,7 @@ SaErrorT process_drive_enclosure_power_off_event(
 	}
 
 	ov_handler = (struct ov_rest_handler *)oh_handler->data;
-	asprintf (&ov_handler->connection->url, "https://%s%s", 
+	WRAP_ASPRINTF (&ov_handler->connection->url, "https://%s%s", 
 			ov_handler->connection->hostname,
 			ov_event->resourceUri);
 	rv = ov_rest_getdriveEnclosureInfoArray(oh_handler, &response,
@@ -1541,7 +1559,7 @@ SaErrorT process_drive_enclosure_power_off_event(
 			&info_result);
 	ov_rest_wrap_json_object_put(response.root_jobj);
 	/* Now we have to get the enclosure serial number*/
-	asprintf (&ov_handler->connection->url, "https://%s%s", 
+	WRAP_ASPRINTF (&ov_handler->connection->url, "https://%s%s", 
 			ov_handler->connection->hostname,
 			info_result.locationUri);
 	rv = ov_rest_getenclosureInfoArray(oh_handler, &enclosure_response,
@@ -1557,30 +1575,31 @@ SaErrorT process_drive_enclosure_power_off_event(
  	 * linked list*/
 	/* FIXME : We could make below code as a funtion to get the resource id
 	 * by using enclosure serial number */
-	enclosure = (struct enclosure_status *)ov_handler->
+	enclosure = (struct enclosureStatus *)ov_handler->
 		ov_rest_resources.enclosure;
 	while(enclosure != NULL){
-		if(!strcmp(enclosure->serial_number,
+		if(!strcmp(enclosure->serialNumber,
 					enclosure_result.serialNumber)){
 			break;
 		}
 		enclosure = enclosure->next;
 	}
 	if(enclosure == NULL){
-		CRIT("Enclosure data of the drive enclosure is unavailable");
+		CRIT("Enclosure data of the drive enclosure n bay %d"
+			" is unavailable", info_result.bayNumber);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(drive_enc_doc);
 		return SA_ERR_HPI_INVALID_RESOURCE;
 	}
 
-	hotswap_state = (struct ov_rest_hotswap_state *)
+	hotswap_state = (struct ovRestHotswapState *)
 		oh_get_resource_data (oh_handler->rptcache,
 				enclosure->
 				server.resource_id[info_result.bayNumber - 1]);
 	if (hotswap_state == NULL)
 	{
-		err ("Failed to get hotswap state of server blade in bay %d, "
-				"in enclosure rid %d", info_result.bayNumber, 
+		err ("Failed to get hotswap state of drive enclosure in bay %d"
+				", in enclosure rid %d", info_result.bayNumber,
 						enclosure->enclosure_rid);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(drive_enc_doc);
@@ -1591,7 +1610,7 @@ SaErrorT process_drive_enclosure_power_off_event(
 			enclosure->
 			server.resource_id[info_result.bayNumber - 1]);
 	if (rpt == NULL) {
-		err("resource RPT is NULL for baynumber %d", 
+		err("RPT is NULL for drive enclosure in bay %d",
 						info_result.bayNumber);
 		wrap_g_free(enclosure_doc);
 		wrap_g_free(drive_enc_doc);
@@ -1667,7 +1686,7 @@ SaErrorT build_inserted_drive_enclosure_rpt(struct oh_handler_state
 			SaHpiRptEntryT *rpt)
 {
 	SaErrorT rv = SA_OK;
-	struct ov_rest_hotswap_state *hotswap_state = NULL;
+	struct ovRestHotswapState *hotswap_state = NULL;
 
 	if (oh_handler == NULL || response == NULL || rpt == NULL) {
 		err("invalid parameters");
@@ -1676,15 +1695,17 @@ SaErrorT build_inserted_drive_enclosure_rpt(struct oh_handler_state
 
 	if (ov_rest_build_drive_enclosure_rpt(oh_handler, response, rpt) 
 		!= SA_OK) {
-		err("Building RPT failed for the inserted drive enclosure");
+		err("Building RPT failed for the inserted drive enclosure"
+			" in bay %d", response->bayNumber);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 
 	if (rpt->ResourceCapabilities & SAHPI_CAPABILITY_MANAGED_HOTSWAP) {
-		hotswap_state = (struct ov_rest_hotswap_state *)
-			g_malloc0(sizeof(struct ov_rest_hotswap_state));
+		hotswap_state = (struct ovRestHotswapState *)
+			g_malloc0(sizeof(struct ovRestHotswapState));
 		if (hotswap_state == NULL) {
-			err("Out of memory");
+			err("Out of memory for drive enclosure in bay %d",
+						response->bayNumber);
 			return SA_ERR_HPI_OUT_OF_MEMORY;
 		}
 		/* Inserted ve enclosure needs some time to stabilize.  Put the
@@ -1698,7 +1719,8 @@ SaErrorT build_inserted_drive_enclosure_rpt(struct oh_handler_state
 
 	rv = oh_add_resource(oh_handler->rptcache, rpt, hotswap_state, 0);
 	if (rv != SA_OK) {
-		err("Failed to add drive enclosure rpt");
+		err("Failed to add RPT for drive enclosure in bay %d",
+							response->bayNumber);
 		wrap_g_free(hotswap_state);
 		return rv;
 	}
@@ -1732,7 +1754,7 @@ SaErrorT ov_rest_proc_drive_enclosure_add_complete(
 	struct ov_rest_handler *ov_handler = NULL;
 	struct driveEnclosureInfoArrayResponse response = {0};
 	struct driveEnclosureInfo info_result = {0};
-	struct enclosure_status *enclosure = NULL;
+	struct enclosureStatus *enclosure = NULL;
 	char *drive_enc_doc = NULL;
 	GSList *asserted_sensors = NULL;
 
@@ -1742,13 +1764,13 @@ SaErrorT ov_rest_proc_drive_enclosure_add_complete(
 	}
 
 	if (event->resourceUri == NULL) {
-		err("resourceUri is NULL, failed to add the drive enclosure");
+		err("Resource uri is NULL, failed to add the drive enclosure");
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
 
 	ov_handler = (struct ov_rest_handler *)oh_handler->data;
 	enclosure = ov_handler->ov_rest_resources.enclosure;
-	asprintf(&ov_handler->connection->url, "https://%s%s",
+	WRAP_ASPRINTF(&ov_handler->connection->url, "https://%s%s",
 			ov_handler->connection->hostname,
 			event->resourceUri);
 	rv = ov_rest_getdriveEnclosureInfoArray(oh_handler, &response,
@@ -1764,7 +1786,8 @@ SaErrorT ov_rest_proc_drive_enclosure_add_complete(
 	/* Build the drive enclosure RPT entry */
 	rv = build_inserted_drive_enclosure_rpt(oh_handler, &info_result, &rpt);
 	if (rv != SA_OK) {
-		err("build inserted drive enclosure rpt failed");
+		err("Build rpt failed for inserted drive enclosure in bay %d",
+							info_result.bayNumber);
 		wrap_g_free(drive_enc_doc);
 		return rv;
 	}
@@ -1773,12 +1796,13 @@ SaErrorT ov_rest_proc_drive_enclosure_add_complete(
 	rv = ov_rest_build_drive_enclosure_rdr(oh_handler,rpt.ResourceId,
 			&info_result);
 	if (rv != SA_OK) {
-		err("build inserted drive enclosure RDR failed");
+		err("Build RDR failed for inserted drive enclosure in bay %d",
+							info_result.bayNumber);
 		/* Free the inventory info from inventory RDR */
 		rv = ov_rest_free_inventory_info(oh_handler, rpt.ResourceId);
 		if (rv != SA_OK) {
-			err("Inventory cleanup failed for resource id %d",
-					rpt.ResourceId);
+			err("Inventory cleanup failed for drive enclosure "
+					"id %d", rpt.ResourceId);
 		}
 		oh_remove_resource(oh_handler->rptcache, rpt.ResourceId);
 		wrap_g_free(drive_enc_doc);
@@ -1786,7 +1810,7 @@ SaErrorT ov_rest_proc_drive_enclosure_add_complete(
 	}
 	while(enclosure != NULL){
 		if(strstr(info_result.locationUri,
-					enclosure->serial_number)){
+					enclosure->serialNumber)){
 			ov_rest_update_resource_status(&enclosure->server,
 					info_result.bayNumber,
 					info_result.serialNumber,
@@ -1800,7 +1824,8 @@ SaErrorT ov_rest_proc_drive_enclosure_add_complete(
 	rv = ov_rest_populate_event(oh_handler, rpt.ResourceId, &hs_event,
 			&asserted_sensors);
 	if (rv != SA_OK) {
-		err("Populating event struct failed");
+		err("Populating event struct failed for drive enclosure "
+				"in bay %d", info_result.bayNumber);
 		wrap_g_free(drive_enc_doc);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}

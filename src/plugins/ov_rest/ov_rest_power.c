@@ -64,10 +64,10 @@ static SaErrorT do_server_op (REST_CON *conn,
 
 	/* setup required REST url */
 	prevUrl = conn->url;
-	asprintf(&uri,"%s/powerState",conn->url);
+	WRAP_ASPRINTF(&uri,"%s/powerState",conn->url);
 	conn->url = uri;
 
-	asprintf(&postField,"{\"powerState\":\"%s\",\"powerControl\":\"%s\"}", 
+	WRAP_ASPRINTF(&postField,"{\"powerState\":\"%s\",\"powerControl\":\"%s\"}", 
 				state, control);
 	rv = rest_put_request(conn, &response, postField);
 
@@ -99,7 +99,7 @@ static SaErrorT do_interconnect_op (REST_CON *conn,
 	SaErrorT rv = SA_OK;
 	char *postField=NULL;
 
-	asprintf(&postField,"[{\"op\": \"replace\","
+	WRAP_ASPRINTF(&postField,"[{\"op\": \"replace\","
 			" \"path\": \"/powerState\","
 			" \"value\": \"%s\"}]", state);
 	rv = rest_patch_request(conn, &response, postField);
@@ -149,18 +149,20 @@ SaErrorT ov_rest_get_power_state(void *oh_handler,
 // Need to check functionality of "lock_ov_rest_handler"
         retVal = lock_ov_rest_handler(ov_handler); 
         if (retVal != SA_OK) {
-                err("OV REST handler is locked");
+                err("OV REST handler is locked while calling __func__"
+			" for resource id %d", resource_id);
                 return retVal;
         }
 
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (rpt == NULL) {
-                err("INVALID RESOURCE");
+                err("Failed to get RPT for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
 
         if (! (rpt->ResourceCapabilities & SAHPI_CAPABILITY_POWER)) {
-                err("INVALID RESOURCE CAPABILITY");
+                err("No POWER Capability for resource id %d",
+						resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
@@ -172,7 +174,7 @@ SaErrorT ov_rest_get_power_state(void *oh_handler,
 								resource_id);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
-	asprintf(&conn->url, "https://%s%s", conn->hostname, url);
+	WRAP_ASPRINTF(&conn->url, "https://%s%s", conn->hostname, url);
 	wrap_free (url);
 
         switch (rpt->ResourceEntity.Entry[0].EntityType) {
@@ -187,7 +189,8 @@ SaErrorT ov_rest_get_power_state(void *oh_handler,
                         break;
 
                 default:
-                        err("Invalid Resource Type");
+                        err("Invalid Resource Type %d for resource id %d",
+			rpt->ResourceEntity.Entry[0].EntityType, resource_id);
                         retVal = SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -230,18 +233,20 @@ SaErrorT ov_rest_set_power_state(void *oh_handler,
 
         rv = lock_ov_rest_handler(ov_handler);
         if (rv != SA_OK) {
-                err("OV REST handler is locked");
+                err("OV REST handler is locked while calling __func__ "
+			"for resource id %d", resource_id);
                 return rv;
         }
 
         rpt = oh_get_resource_by_id(handler->rptcache, resource_id);
         if (rpt == NULL) {
-                err(" INVALID RESOURCE");
+                err("Failed to get RPT for resource id %d", resource_id);
                 return SA_ERR_HPI_INVALID_RESOURCE;
         }
 
         if (! (rpt->ResourceCapabilities & SAHPI_CAPABILITY_POWER)) {
-                err(" INVALID RESOURCE CAPABILITY");
+                err("No POWER Capability for resource id %d",
+							resource_id);
                 return SA_ERR_HPI_CAPABILITY;
         }
 
@@ -254,7 +259,7 @@ SaErrorT ov_rest_set_power_state(void *oh_handler,
 								resource_id);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
-        asprintf(&conn->url, "https://%s%s", conn->hostname, url);
+        WRAP_ASPRINTF(&conn->url, "https://%s%s", conn->hostname, url);
         wrap_free (url);
 
         switch (rpt->ResourceEntity.Entry[0].EntityType) {
@@ -271,7 +276,8 @@ SaErrorT ov_rest_set_power_state(void *oh_handler,
                         break;
 
                  default:
-                        err("Invalid Resource Type");
+                        err("Invalid Resource Type %d for resource id %d",
+			rpt->ResourceEntity.Entry[0].EntityType, resource_id);
                         return SA_ERR_HPI_UNKNOWN;
         }
 
@@ -333,7 +339,8 @@ SaErrorT get_server_power_state(REST_CON *conn,
 	else if (strcmp(powerState, "Off") ==0)
 		*state = SAHPI_POWER_OFF;
 	else{
-		err("Wrong (REBOOT) or Unknown Power State detected");
+		err("Wrong (REBOOT) or Unknown Power State detected for "
+							"Server");
 		ov_rest_wrap_json_object_put(response.jobj);
 		return SA_ERR_HPI_INTERNAL_ERROR;
 	}
@@ -400,7 +407,8 @@ SaErrorT get_interconnect_power_state(REST_CON *conn,
         else if (strcmp(powerState, "Unknown") ==0)
                 *state = SAHPI_POWER_OFF;
         else{
-                err("Wrong (REBOOT) or Unknown Power State detected");
+                err("Wrong (REBOOT) or Unknown Power State detected for "
+						"Interconnect");
 		ov_rest_wrap_json_object_put(response.jobj);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
@@ -437,7 +445,7 @@ SaErrorT set_server_power_state(REST_CON *conn,
 
         rv = get_server_power_state(conn, &tmp);
         if (rv != SA_OK) {
-                err("get server power state failed");
+                err("Get server power state failed");
                 return rv;
         }
 
@@ -485,7 +493,7 @@ SaErrorT set_server_power_state(REST_CON *conn,
                        break;
 
                 default:
-                        err("Invalid power state");
+                        err("Invalid power state %d", state);
                         return SA_ERR_HPI_INVALID_PARAMS;
         }
 
@@ -521,7 +529,7 @@ SaErrorT set_interconnect_power_state(REST_CON *conn,
 
         rv = get_interconnect_power_state(conn, &tmp);
         if (rv != SA_OK) {
-                err("get interconnect power state failed");
+                err("Get interconnect power state failed");
                 return rv;
         }
 
@@ -571,7 +579,7 @@ SaErrorT set_interconnect_power_state(REST_CON *conn,
                         break;
 
                 default:
-                        err("Invalid power state");
+                        err("Invalid power state %d", state);
                         return SA_ERR_HPI_INVALID_PARAMS;
         }
 

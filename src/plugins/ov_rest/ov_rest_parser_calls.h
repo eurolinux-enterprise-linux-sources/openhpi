@@ -122,39 +122,210 @@ OV_REST_ENUM(bladeType,
         BLADE_TYPE_IO)
 OV_REST_ENUM(eventType,
         cpqRackServerBladeInserted2,
-	BladeInserted,
+        BladeInserted,
         cpqRackServerBladeRemoved2,
-	BladeRemoved,
-	InterconnectOk,
-	cpqRackNetConnectorInserted,
-	InterconnectInserted,
-	cpqRackNetConnectorRemoved,
-	InterconnectRemoved,
-	InterconnectDiscoveryComplete,
-	cpqDa6AccelStatusChange,
-	PowerSupplyInserted,
-	PowerSupplyRemoved,
-	FanInserted,
-	FanRemoved,
-	cpqSm2ServerPowerOn,
-	cpqSm2ServerPowerOff,
-	cpqSm2ServerReset,
-	switchresponse,
-	HealthStatusArrayCategoryStatus,
-	coldStart,
-	linkDown,
-	linkUp,
-	TopologyError,
-	PartnerSwitchCommunicationFailure,
-	PartnerSwitchVersionMismatch,
-	PartnerSwitchWWIDMismatch,
-	PartnerSwitchNotPresent,
-	NotConfigured,
-	CommunicationError,
-	opModeChange,
-	subPortStatusChange,
-	linkStateChange,
-	connectionStateChange,
+        BladeRemoved,
+        InterconnectOk,
+        cpqRackNetConnectorInserted,
+        InterconnectInserted,
+        cpqRackNetConnectorRemoved,
+        InterconnectRemoved,
+        InterconnectDiscoveryComplete,
+        cpqDa6AccelStatusChange,
+        PowerSupplyInserted,
+        PowerSupplyRemoved,
+        FanInserted,
+        FanRemoved,
+        cpqSm2ServerPowerOn,
+        cpqSm2ServerPowerOff,
+        cpqSm2ServerReset,
+        switchresponse,
+        HealthStatusArrayCategoryStatus,
+        InterconnectPowerRequestGranted,
+        InterconnectManagerICMReadyFault,
+        InterconnectManagerICMReadyFaultCleared,
+        BladeManagerIloInternalCritical,
+        BladeManagerIloInternalCriticalCleared,
+        BladeManagerIloInternalWarning,
+        BladeManagerIloInternalWarningCleared,
+        EmIsActive,
+        PowerSupplyInputLossFault,
+        invalidTopology,
+        neighbourIcPoweredOff16,
+        neighbourIcPoweredOff46,
+        cxpPortConnected,
+        cxpPortMisCabled,
+        cxpPortNotConnected,
+        CxpPortNotConnectedToExpectedICMKind,
+        failedCableRead,
+        flexFabric40GbEModuleAtSideANotInFirstEnclosure,
+        flexFabric40GbEModuleAtSideBNotInFirstOrSecondEnclosure,
+        icNotinSameBaySet,
+        InvalidInterconnectKind,
+        mixedIcInSameBaySet,
+        mixedIcLnSameBaySet,
+        moreThanOneflexFabric40GbEModuleAtOneSideofBaySet,
+        neighbourIcPoweredOff,
+        noflexFabric40GbEModuleAtSideA,
+        nonHpeCableInserted,
+        PortStatusLinked,
+        PortStatusLinkedInvalidPort,
+        PortStatusUnlinked,        
+        unsupportedlc,
+        PortStatusLinked1,
+        PortStatusLinked2,
+        PortStatusLinked4,
+        PortStatusUnlinked1,
+        PortStatusUnlinked2,
+        PortStatusUnlinked4,
+        opFcoeActiveChange,
+        ilt,
+        PowerSupplyInternalCommFault,
+        PowerSupplyInternalCommFaultCleared,
+        FanElectronicFuseBlownCleared,
+        ActivateStagedFirmwareSuccessful,
+        BladeCommFault,
+        BladeCommFaultCleared,
+        BladeFruFault,
+        BladeIloOperationalStatusCritical,
+        BladeInsertFault,
+        BladeInsertFaultCleared,
+        BladeManagerICMReadyFault,
+        BladeManagerICMReadyFaultCleared,
+        BladePowerOn,
+        ChassisAmbientThermal,
+        ChassisAmbientThermalCleared,
+        ChassisUidBlinking,
+        CIManagerCommFault,
+        CIManagerCommFaultCleared,
+        CIManagerEfusePGoodFault,
+        CIManagerEfusePGoodFaultCleared,
+        CIManagerFruFault,
+        CIManagerIloFault,
+        CIManagerIloFaultCleared,
+        CIManagerIloInternalCritical,
+        CIManagerIloInternalCriticalCleared,
+        CIManagerIloInternalWarning,
+        CIManagerIloInternalWarningCleared,
+        CIManagerInsertFault,
+        CIManagerInsertFaultCleared,
+        EmCommFault,
+        EmCommFaultCleared,
+        EmDataReplicationFault,
+        EmDataReplicationFaultCleared,
+        EmFruFault,
+        EmInsertFault,
+        EmInsertFaultCleared,
+        EmOneViewLinkValidationPingAddressMismatch,
+        EmOneViewLinkValidationPingAddressMismatch_Cleared,
+        EmOneViewLinkValidationPingFailed,
+        EmOneViewLinkValidationPingFailed_Cleared,
+        EmOneViewLinkValidationPingFailedCleared_PingAddressChanged,
+        EmOneViewLinkValidationPingFailedCleared_PingDisabled,
+        EmStagedFirmwareUpdated,
+        EmSwitchHardwareCritical,
+        EmSwitchHardwareOk,
+        FanCommFault,
+        FanCommFaultCleared,
+        FanEfusePGoodFault,
+        FanEfusePGoodFaultCleared,
+        FanFruFault,
+        FanInsertFault,
+        FanInsertFaultCleared,
+        FanRotor1Fault,
+        FanRotor1FaultCleared,
+        FanRotor2Fault,
+        FanRotor2FaultCleared,
+        FrontPanelCommFault,
+        FrontPanelCommFaultCleared,
+        FrontPanelFruFault,
+        FrontPanelInserted,
+        FrontPanelInsertFault,
+        FrontPanelInsertFaultCleared,
+        InterconnectCommFault,
+        InterconnectCommFaultCleared,
+        InterconnectFruFault,
+        InterconnectInsertFault,
+        InterconnectInsertFaultCleared,
+        InterconnectPowerOff,
+        InterconnectPowerOn,
+        MidplaneChassisIdUpdated,
+        MidplaneFruFault,
+        PowerAllocationCollectionChanged,
+        PowerAllocationDeleted,
+        PowerAllocationPatched,
+        PowerAllocationPosted,
+        PowerSubsystemOverLimit,
+        PowerSubsystemOverLimitCleared,
+        PowerSupplyCommFault,
+        PowerSupplyCommFaultCleared,
+        PowerSupplyFruFault,
+        PowerSupplyFruManufacturedForInvalidFault,
+        PowerSupplyInputFault,
+        PowerSupplyInsertFault,
+        PowerSupplyInsertFaultCleared,
+        PowerSupplyInterposerCommFault,
+        PowerSupplyInterposerCommFaultCleared,
+        PowerSupplyInterposerCritical,
+        PowerSupplyInterposerDiscoveryComplete,
+        PowerSupplyInterposerFruContentFault,
+        PowerSupplyInterposerFruFault,
+        PowerSupplyInterposerFruManufacturedForInvalidFault,
+        PowerSupplyInterposerFruManufacturedForMismatchFault,
+        PowerSupplyInterposerInserted,
+        PowerSupplyInterposerInsertFault,
+        PowerSupplyInterposerInsertFaultCleared,
+        PowerSupplyInterposerOk,
+        PowerSupplyInterposerPSCommFault,
+        PowerSupplyInterposerPSCommFaultCleared,
+        PowerSupplyInterposerRemoved,
+        PowerSupplyInterposerWarning,
+        PowerSupplyIpduInfoChanged,
+        PowerSupplyOvertempFault,
+        PowerSupplyPowerCycledFault,
+        PowerSupplyPsOkFault,
+        PowerSupplyReinsertFault,
+        PowerSupplyReplaceFault,
+        RingNoActiveMgmtPort,
+        RingNoActiveMgmtPortCleared,
+        RingNoActiveMgmtPortCleared_OwnerChanged,
+        RingNoActiveMgmtPort_RingDegraded,
+        StagedFirmwareOperationSuccessful,
+        BladeRedundantCommFault,
+        BladeRedundantCommFaultCleared,
+        ChassisEventServiceSubscriptionOverrunFault,
+        ChassisEventServiceSubscriptionOverrunFaultCleared,
+        ChassisRedundantCommFault,
+        ChassisRedundantCommFaultCleared,
+        CIManagerRedundantCommFault,
+        CiManagerRedundantCommFaultCleared,
+        EmHighAssuranceBootCritical,
+        EmRedundantCommFault,
+        EmRedundantCommFaultCleared,
+        FanRedundantCommFault,
+        FanRedundantCommFaultCleared,
+        FrontPanelRedundantCommFault,
+        FrontPanelRedundantCommFaultCleared,
+        InterconnectRedundantCommFault,
+        InterconnectRedundantCommFaultCleared,
+        OneViewServiceEventsCommFault,
+        OneViewServiceEventsCommFaultCleared,
+        PowerSupplyRedundantCommFault,
+        SupplyRedundantCommFaultCleared,
+        coldStart,
+        linkDown,
+        linkUp,
+        TopologyError,
+        PartnerSwitchCommunicationFailure,
+        PartnerSwitchVersionMismatch,
+        PartnerSwitchWWIDMismatch,
+        PartnerSwitchNotPresent,
+        NotConfigured,
+        CommunicationError,
+        opModeChange,
+        subPortStatusChange,
+        linkStateChange,
+        connectionStateChange,
         cpqHe3TemperatureDegraded,
         cpqHe3ThermalConfirmation,
         cpqSeCpuStatusChange,
@@ -232,7 +403,6 @@ OV_REST_ENUM(eventType,
         enableRichTLV,
         uplinkSetStateChange,
         interconnectStateChange,
-//        connection.bandwidthChange,
         sanVlanMismatch,
         cannotCommunicateWithSwitch,
         disabledInterconnectConnectivityForSwitch,
@@ -240,7 +410,6 @@ OV_REST_ENUM(eventType,
         duplicateSwitch,
         invalidSwitchCredentials,
         invalidXmlReturnedFromSwitch,
-
         BladeConfigurationFault,
         BladeConfigurationFaultCleared,
         BladeCritical,
@@ -482,13 +651,13 @@ OV_REST_ENUM(eventType,
         TooManySessions,
         UpdateInterrupted,
         UpdateSuccessful,
-        InterconnectManagerICMReadyFaultCleared,
-	OEM_EVENT)
+        OEM_EVENT)
 OV_REST_ENUM(name,
         TASK_ADD,
         TASK_REMOVE,
-	TASK_POWER_ON,
-	TASK_POWER_OFF,
+        TASK_POWER_ON,
+        TASK_POWER_OFF,
+        TASK_ACTIVATE_STANDBY_APPLIANCE,
         TASK_REFRESH,
         TASK_COLLECT_UTILIZATION_DATA,
         TASK_MANAGE_UTILIZATION_DATA,
@@ -496,23 +665,24 @@ OV_REST_ENUM(name,
         TASK_ASSIGN_IPV4_ADDRESS,
         TASK_INTERCONNECT_IPV4_CONSISTENCY_CHECK,
         TASK_BACKGROUND_REFRESH,
-	TASK_CHECK_DEVICE_IDENTITY_AND_LOCATION,
-	TASK_RESET_SYNERGY_FRAME_LINK_MODULE,
-	TASK_CLEAR_ALERTS,
-	TASK_UPDATE,
-	TASK_CONFIGURE_BOOT_ORDER_SETTINGS_FOR_SERVER,
-	TASK_ASSIGN_PROFILE,
-	TASK_BACKGROUNDREPOREFRESHTASK,
-	TASK_CLEAR_PROFILE,
-	TASK_CONFIGURE,
-	TASK_CREATE,
-	TASK_DELETE,
-	TASK_LOGICAL_ENCLOSURE_FIRMWARE_UPDATE,
-	TASK_REAPPLY_CONFIGURATION,
-	TASK_RELEASE,
-	TASK_REMOVE_PROFILE,
-	TASK_UPDATE_ENCLOSURE_FIRMWARE,
-	TASK_VALIDATE)
+        TASK_CHECK_DEVICE_IDENTITY_AND_LOCATION,
+        TASK_RESET_SYNERGY_FRAME_LINK_MODULE,
+        TASK_CLEAR_ALERTS,
+        TASK_UPDATE,
+        TASK_CONFIGURE_BOOT_ORDER_SETTINGS_FOR_SERVER,
+        TASK_ASSIGN_PROFILE,
+        TASK_BACKGROUNDREPOREFRESHTASK,
+        TASK_CLEAR_PROFILE,
+        TASK_CONFIGURE,
+        TASK_CREATE,
+        TASK_DELETE,
+        TASK_LOGICAL_ENCLOSURE_FIRMWARE_UPDATE,
+        TASK_REAPPLY_CONFIGURATION,
+        TASK_RELEASE,
+        TASK_REMOVE_PROFILE,
+        TASK_UPDATE_ENCLOSURE_FIRMWARE,
+        TASK_VALIDATE,
+        TASK_RESET)
 
 OV_REST_ENUM( sensorStatus,
        SENSOR_STATUS_NO_OP,
@@ -533,6 +703,10 @@ struct certificates
 	const char *SSLKey;
 	const char *ca;
 };
+struct idleTimeout
+{
+	int timeout;
+}; 
 struct applianceNodeInfoResponse
 {
 	json_object *root_jobj;
@@ -576,6 +750,11 @@ struct applianceHaNodeInfoResponse
 	json_object *root_jobj;
 	json_object *haNode;
 };
+struct applianceHaNodeInfoArrayResponse
+{
+	json_object *root_jobj;
+	json_object *haNodeArray;
+};
 struct applianceHaNodeInfo
 {
 	char version[MAX_256_CHARS];
@@ -585,6 +764,10 @@ struct applianceHaNodeInfo
 	char modelNumber[MAX_256_CHARS];
 	char applianceId[MAX_256_CHARS]; /* AKA uuid of the appliance*/
 	char uri[MAX_URI_LENGTH];
+	char enclosure_uri[MAX_URI_LENGTH];
+	char serialNumber[MAX_256_CHARS];
+	byte bayNumber;
+	enum resourceCategory type;
 };
 struct applianceInfo
 {
@@ -644,10 +827,13 @@ struct enclosureInfo
         char rackName[MAX_256_CHARS];
         char enclosureName[MAX_256_CHARS];
         char name[MAX_256_CHARS];
+	byte composerBays;
         byte bladeBays;
         char model[MAX_256_CHARS];
         char partNumber[MAX_256_CHARS];
         char serialNumber[MAX_256_CHARS];
+        int bayNumber;
+        enum presence presence;
         char uuid[MAX_UUID_LENGTH];
 	char uri[MAX_URI_LENGTH];
         char hwVersion[MAX_256_CHARS];
@@ -754,7 +940,7 @@ struct serverhardwareInfo
         enum powerState powerState;
         enum healthStatus serverStatus;
 	char uidState[MAX_256_CHARS];
-	enum resource_category type;
+	enum resourceCategory type;
 };
 
 struct driveEnclosureInfoArrayResponse
@@ -781,7 +967,7 @@ struct driveEnclosureInfo
         enum powerState powerState;
 	enum healthStatus drvEncStatus;
         char uidState[MAX_256_CHARS];         
-	enum resource_category type;
+	enum resourceCategory type;
 };
 
 
@@ -828,7 +1014,7 @@ struct interconnectInfo
 	enum powerState powerState;	
 	char uidState[MAX_256_CHARS];
         enum healthStatus interconnectStatus;
-	enum resource_category type;
+	enum resourceCategory type;
 };
 
 struct powersupplyArrayResponse
@@ -847,7 +1033,7 @@ struct powersupplyInfo
         enum healthStatus status;
         enum presence presence;
         int outputCapacityWatts;
-	enum resource_category type;
+	enum resourceCategory type;
 };
 struct fanArrayResponse
 {
@@ -866,7 +1052,7 @@ struct fanInfo
 	char fanBayType[MAX_256_CHARS];
 	enum healthStatus status;
 	enum presence presence;
-	enum resource_category type;
+	enum resourceCategory type;
 	const char uri[MAX_URI_LENGTH];
 	struct fanInfo *next;
 };
@@ -917,9 +1103,11 @@ struct eventInfo
 #define OV_REST_CONTENT_TYPE \
 	"Content-Type: application/json"
 #define OV_REST_X_API_VERSION \
-	"X-API-Version: 300"
+	"X-API-Version: 600"
 #define OV_REST_AUTH \
 	"Auth: %s"
+#define OV_REST_SESSIONID \
+	"Session-Id: %s"
 #define OV_REST_X_AUTH_TOKEN \
 	"X-auth-Token: %s"
 #define OV_REST_LOGIN_URI \
@@ -933,9 +1121,11 @@ struct eventInfo
 #define OV_GET_CERTIFICATES_URI \
 	"https://%s/rest/certificates/client/rabbitmq/keypair/default"
 #define OV_GET_CA_URI \
-	"https://%s/rest/certificates/ca"
+	"https://%s/rest/certificates/ca?filter=certType:INTERNAL"
 #define OV_APPLIANCE_VERSION_URI \
 	"https://%s/rest/appliance/nodeinfo/version"
+#define OV_GET_IDLE_TIMEOUT_URI \
+	"https://%s/rest/sessions/idle-timeout"
 #define OV_APPLIANCE_STATUS_URI \
 	"https://%s/rest/appliance/nodeinfo/status"
 #define OV_DATACENTER_URI \
@@ -1005,9 +1195,13 @@ void ov_rest_json_parse_server_fan_sensors(json_object *jvalue,
                         struct serverhardwareFanInfo *response);
 void ov_rest_json_parse_enc_device_bays( json_object *jarray, 
 			struct enclosureDeviceBays* response);
+void ov_rest_json_parse_enc_manager_bays( json_object *jarray,
+                        struct enclosureInfo* response);
 void ov_rest_json_parse_datacenter( json_object *jarray, int i, 
 			struct datacenterInfo* response);
 void ov_rest_json_parse_events( json_object *jobj, struct eventInfo* response);
+void ov_rest_json_parse_alerts_utility( json_object *jobj, 
+					struct eventInfo* response);
 void ov_rest_json_parse_alerts( json_object *jobj, struct eventInfo* response);
 void ov_rest_json_parse_tasks( json_object *jobj, struct eventInfo* response);
 #endif /*_PARSER_CALLS_H*/
