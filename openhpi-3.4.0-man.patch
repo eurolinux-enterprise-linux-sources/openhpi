@@ -1,0 +1,203 @@
+From a870faf95052553be84cdc4a2a0d320a1e2025a8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Dan=20Hor=C3=A1k?= <dan@danny.cz>
+Date: Mon, 25 Aug 2014 10:09:40 +0200
+Subject: [PATCH] man page fixes
+
+sync man pages with the output of --help (rhbz#948461)
+---
+ docs/man/hpiel.1.pod        |  6 +++---
+ docs/man/hpitree.1.pod      |  2 +-
+ docs/man/hpiwdt.1.pod       |  4 ++--
+ docs/man/ohdomainlist.1.pod | 16 ++++++++++++++
+ docs/man/ohhandler.1.pod    | 14 ++++++------
+ docs/man/openhpid.8.pod     | 52 ++++++++++++++++++++++++++++++++-------------
+ 6 files changed, 66 insertions(+), 28 deletions(-)
+
+diff --git a/docs/man/hpiel.1.pod b/docs/man/hpiel.1.pod
+index 7ac4a6b..39c56f4 100644
+--- a/docs/man/hpiel.1.pod
++++ b/docs/man/hpiel.1.pod
+@@ -4,9 +4,9 @@ hpiel - An openhpi sample application that displays HPI event log entries.
+ 
+ =head1 SYNOPSIS 
+ 
+- hpiel [-D nn] [-N host[:port]] [-C <cfgfile>] [-d] [-e entitypath] [-c -p -r -X -h ]
+- hpiel [--Domain=nn]  [--host=host[:port]] [--cfgfile=file] 
+-       [--del] [--entitypath="entitypath"] [--clear --resource --rdr --xml --debug --help]
++ hpiel [-D nn] [-N host[:port]] [-C <cfgfile>] [-d] [-E entity-path] [-c -p -r -X -h ]
++ hpiel [--domain=nn]  [--host=host[:port]] [--cfgfile=file] 
++       [--del] [--entity-path="entitypath"] [--clear --resource --rdr --debug --help]
+ 
+ =head1 DESCRIPTION
+ 
+diff --git a/docs/man/hpitree.1.pod b/docs/man/hpitree.1.pod
+index f677931..ba7210f 100644
+--- a/docs/man/hpitree.1.pod
++++ b/docs/man/hpitree.1.pod
+@@ -5,7 +5,7 @@ and resources' manamegement instruments (rdr's) data structures of the managed o
+ 
+ =head1 SYNOPSIS 
+ 
+- hpitree [-D nn] [-N host[:port]] [-C <cfgfile>] [-acdiorsw ] [-n nn] [-x] [-h]
++ hpitree [-D nn] [-N host[:port]] [-C <cfgfile>] [-acdiorsw ] [-n nn] [-X] [-h]
+  hpitree [--domain=nn] [--host=host[:port]] [--cfgfile=file] [--all] [--controls] [--rdrs] [--inventories] [--rpts]
+          [--sensors] [--watchdogs] [--overview] [--resource=nn] [--debug] [--help]
+ 
+diff --git a/docs/man/hpiwdt.1.pod b/docs/man/hpiwdt.1.pod
+index b876d9b..6cf4e45 100644
+--- a/docs/man/hpiwdt.1.pod
++++ b/docs/man/hpiwdt.1.pod
+@@ -4,9 +4,9 @@ hpiwdt -  This sample openhpi application reads and enables the watchdog timer.
+ 
+ =head1 SYNOPSIS 
+ 
+- hpiwdt [-D nn] [-N host[:port]] [-C <cfgfile>] [-der -t sec] [-X] [-h]
++ hpiwdt [-D nn] [-N host[:port]] [-C <cfgfile>] [-t sec] [-X] [-h]
+  hpiwdt [--domain=nn] [--host=host[:port]] [--cfgfile=file]
+-        [--disable][--enable][--reset][--timout n] [--debug] [--help]
++        [--disable][--enable][--reset][--timeout n] [--debug] [--help]
+ 
+ =head1 DESCRIPTION
+ 
+diff --git a/docs/man/ohdomainlist.1.pod b/docs/man/ohdomainlist.1.pod
+index c0088df..2631989 100644
+--- a/docs/man/ohdomainlist.1.pod
++++ b/docs/man/ohdomainlist.1.pod
+@@ -38,6 +38,10 @@ Show help options
+ 
+ =over 2
+ 
++=item B<-D>, B<--domain>=I<nn>
++
++Select domain id nn
++
+ =item B<-X>, B<--debug>
+ 
+ Display debug messages
+@@ -46,6 +50,18 @@ Display debug messages
+ 
+ Verbose mode
+ 
++=item B<-N>, B<--host>=I<"host[:port]">
++
++Open session to the domain served by the daemon
++at the specified URL (host:port).
++This option overrides the OPENHPI_DAEMON_HOST and
++OPENHPI_DAEMON_PORT environment variables.
++
++=item B<-C>, B<--cfgfile>=I<"file">
++
++Use passed file as client configuration file.
++This option overrides the OPENHPICLIENT_CONf environment variable.
++
+ =back
+ 
+ =head1 SEE ALSO
+diff --git a/docs/man/ohhandler.1.pod b/docs/man/ohhandler.1.pod
+index 9e11bba..c093027 100644
+--- a/docs/man/ohhandler.1.pod
++++ b/docs/man/ohhandler.1.pod
+@@ -7,13 +7,13 @@ ohhandler - An openhpi sample application that uses the openhpi additional inter
+  ohhandler [-D nn] [-N host[:port]] [-C <cfgfile>] [-X] command <specific arguments>
+  ohhandler [--domain nn] [--host=host[:port]] [--cfgfile=file] [--debug] command <specific arguments>
+ 
+- ohhandler [-D nn] [-x] list
+- ohhandler [-D nn] [-x] info    <handler-id>
+- ohhandler [-D nn] [-x] destroy <handler-id>
+- ohhandler [-D nn] [-x] getnext <handler-id>
+- ohhandler [-D nn] [-x] find    <resource-id>
+- ohhandler [-D nn] [-x] retry   <handler-id>
+- ohhandler [-D nn] [-x] create  plugin <plugin-name> <configuration-parameters>
++ ohhandler [-D nn] [-X] list
++ ohhandler [-D nn] [-X] info    <handler-id>
++ ohhandler [-D nn] [-X] destroy <handler-id>
++ ohhandler [-D nn] [-X] getnext <handler-id>
++ ohhandler [-D nn] [-X] find    <resource-id>
++ ohhandler [-D nn] [-X] retry   <handler-id>
++ ohhandler [-D nn] [-X] create  plugin <plugin-name> <configuration-parameters>
+ 
+ =head1 DESCRIPTION
+ 
+diff --git a/docs/man/openhpid.8.pod b/docs/man/openhpid.8.pod
+index 9ae13b7..8973793 100644
+--- a/docs/man/openhpid.8.pod
++++ b/docs/man/openhpid.8.pod
+@@ -38,38 +38,60 @@ The client and daemon currently cannot resolve differences between 32-bit and
+ 
+ =over 4
+ 
+-=item B<-f> I<pidfile>
++=item B<-c>, B<--cfg>=I<conf_file>
+ 
+-This overrides the default location of the pidfile.
++Sets path/name of the configuration file.
++This option is required unless the environment 
++variable OPENHPI_CONF has been set to a valid configuration file.
+ 
+-=item B<-n>
++=item B<-v>, B<--verbose>
+ 
+-This forces the daemon to run in the foreground.
++This option causes the daemon to display verbose
++messages. This option is optional.
+ 
+-=item B<-p> I<port>
++=item B<-b>, B<--bind>=I<bind_address>
+ 
+-This is used to override the port to listen on by the daemon.
++Bind address for the daemon socket.
++Also bind address can be specified with
++OPENHPI_DAEMON_BIND_ADDRESS environment variable.
++No bind address is used by default.
+ 
+-=item B<-s> I<seconds>
++=item B<-p>, B<--port>=I<port>
+ 
+-Read timeout used by the daemon sockets. Default is unlimited.
++Overrides the default listening port (4743) of the daemon.
++The option is optional.
+ 
+-=item B<-t> I<threads>
++=item B<-f>, B<--pidfile>=I<pidfile>
+ 
+-Sets the maximum number of connection threads. Default is unlimited.
++Overrides the default path/name for the daemon pid file.
++The option is optional.
+ 
+-=item B<-v>
++=item B<-s>, B<--timeout>=I<seconds>
+ 
+-Display verbose messages
++Overrides the default socket read timeout of 30 minutes.
++The option is optional.
+ 
+-=item B<-4>
++=item B<-t>, B<--threads>=I<threads>
+ 
+-The daemon will try to bind IPv4 socket.
++Sets the maximum number of connection threads.
++The default is umlimited.
++The option is optional.
+ 
+-=item B<-6>
++=item B<-n>, B<--nondaemon>
++
++Forces the code to run as a foreground process and NOT as a daemon.
++The default is to run as a daemon.
++The option is optional.
++
++=item B<-6>, B<--ipv6>
+ 
+ The daemon will try to bind IPv6 socket.
+ 
++=item B<-4>, B<--ipv4>
++
++The daemon will try to bind IPv4 socket (default).
++IPv6 option takes precedence over IPv6 option.
++
+ =item B<-4 -6>
+ 
+ The daemon will try to bind IPv4 or IPv6 socket.
+-- 
+1.9.3
+
