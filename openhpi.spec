@@ -3,7 +3,7 @@
 Summary:        Hardware Platform Interface library and tools
 Name:           openhpi
 Version:        3.4.0
-Release:        2%{?dist}
+Release:        4%{?dist}
 License:        BSD
 Group:          System Environment/Base
 URL:            http://www.openhpi.org
@@ -18,6 +18,14 @@ Patch2:         %{name}-3.4.0-man.patch
 Patch3:         %{name}-3.4.0-hpisettime.patch
 # https://sourceforge.net/p/openhpi/bugs/1834/
 Patch4:         %{name}-3.4.0-accept.patch
+# https://sourceforge.net/p/openhpi/bugs/1899/
+Patch5:         %{name}-3.4.0-hpithres.patch
+# https://sourceforge.net/p/openhpi/bugs/1907/
+Patch6:         %{name}-3.4.0-sysfs.patch
+# https://sourceforge.net/p/openhpi/bugs/1900/
+Patch7:         %{name}-3.4.0-hpishell.patch
+# https://sourceforge.net/p/openhpi/bugs/1869/
+Patch8:         %{name}-3.4.0-mutex.patch
 BuildRequires:  libsysfs-devel
 BuildRequires:  net-snmp-devel
 BuildRequires:  OpenIPMI-devel
@@ -76,6 +84,11 @@ The development libraries and header files for the OpenHPI project.
 %patch2 -p1 -b .man
 %patch3 -p1 -b .hpisettime
 %patch4 -p1 -b .accept
+%patch5 -p1 -b .hpithres
+%patch6 -p1 -b .sysfs
+%patch7 -p1 -b .hpishell
+%patch8 -p1 -b .mutex
+
 # workaround dependecies between manually modified autotooled files
 #touch aclocal.m4
 #touch config.h.in
@@ -152,6 +165,14 @@ make check
 
 
 %changelog
+* Tue Jun 21 2016 Rafael Fonseca <rdossant@redhat.com> - 3.4.0-4
+- Resolves: rhbz#1255041
+
+* Thu Apr 07 2016 Rafael Fonseca <rdossant@redhat.com> - 3.4.0-3
+- Resolves: rhbz#1259719
+- Resolves: rhbz#1259729
+- Resolves: rhbz#1262220
+
 * Thu Jun 25 2015 Rafael Fonseca <rdossant@redhat.com> - 3.4.0-2
 - fix /var/lib/openhpi permissions
 - Resolves: rhbz#1063367

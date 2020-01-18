@@ -1,0 +1,20 @@
+Index: trunk/hpi_shell/session.c
+===================================================================
+--- trunk/hpi_shell/session.c	(revision 7666)
++++ trunk/hpi_shell/session.c	(revision 7667)
+@@ -50,6 +50,7 @@
+ 
+ 	memset(buf, 0, PROGRESS_BUF_SIZE);
+ 	mes_len = strlen(progress_mes);
++	g_mutex_lock(thread_mutex);
+ 	while (in_progress) {
+ 		snprintf(A, 10, " %d.%d s ", t / 10, t % 10);
+ 		len = strlen(A);
+@@ -73,6 +74,7 @@
+ 		if (i < (PROGRESS_BUF_SIZE - mes_len - 1)) i++;
+ 		t++;
+ 	};
++	g_mutex_unlock(thread_mutex);
+         g_thread_exit(0);
+ 	return (void *)1;
+ }

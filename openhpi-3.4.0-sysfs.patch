@@ -1,0 +1,13 @@
+Index: trunk/plugins/sysfs/sysfs2hpi.c
+===================================================================
+--- trunk/plugins/sysfs/sysfs2hpi.c	(revision 7664)
++++ trunk/plugins/sysfs/sysfs2hpi.c	(working copy)
+@@ -571,6 +571,7 @@
+ 	if (!(sys->bus->devices)) {
+ 		err("no i2c devices found");
+ 		sysfs_close_bus(sys->bus);
++		sys->bus = NULL;
+ 		sys->initialized++;
+ 		return 0;
+ 	}
+
