@@ -3,7 +3,7 @@
 Summary:        Hardware Platform Interface library and tools
 Name:           openhpi
 Version:        3.4.0
-Release:        4%{?dist}
+Release:        4%{?dist}.1
 License:        BSD
 Group:          System Environment/Base
 URL:            http://www.openhpi.org
@@ -26,6 +26,8 @@ Patch6:         %{name}-3.4.0-sysfs.patch
 Patch7:         %{name}-3.4.0-hpishell.patch
 # https://sourceforge.net/p/openhpi/bugs/1869/
 Patch8:         %{name}-3.4.0-mutex.patch
+# https://sourceforge.net/p/openhpi/bugs/1916/
+Patch9:         %{name}-3.4.0-umask.patch
 BuildRequires:  libsysfs-devel
 BuildRequires:  net-snmp-devel
 BuildRequires:  OpenIPMI-devel
@@ -88,6 +90,7 @@ The development libraries and header files for the OpenHPI project.
 %patch6 -p1 -b .sysfs
 %patch7 -p1 -b .hpishell
 %patch8 -p1 -b .mutex
+%patch9 -p1 -b .umask
 
 # workaround dependecies between manually modified autotooled files
 #touch aclocal.m4
@@ -165,6 +168,9 @@ make check
 
 
 %changelog
+* Fri Oct 07 2016 Rafael Fonseca <rdossant@redhat.com> - 3.4.0-4.1
+- Resolves: rhbz#1382340 - openhpi creates logs with 666 permissions
+
 * Tue Jun 21 2016 Rafael Fonseca <rdossant@redhat.com> - 3.4.0-4
 - Resolves: rhbz#1255041
 
