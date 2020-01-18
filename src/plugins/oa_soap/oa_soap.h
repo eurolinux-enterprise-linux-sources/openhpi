@@ -109,6 +109,8 @@
 /* SOAP XML calls timeout values for event thread and hpi calls */
 #define HPI_CALL_TIMEOUT 40
 #define EVENT_CALL_TIMEOUT 40
+/* getAllEventEx needs to be issues within 300 seconds */
+#define SUBSCRIBE_TIMEOUT 295
 
 /* Error code for SOAP XML calls */
 #define SOAP_OK 0
@@ -192,6 +194,7 @@ struct oa_soap_resource_status
 /* Structure for storing the OA SOAP plugin information */
 struct oa_soap_handler
 {
+        enum hpoa_boolean in_discovery_thread;
         enum hpoa_boolean ipswap;
         enum oa_soap_plugin_status status;
         struct oa_soap_resource_status oa_soap_resources;
@@ -213,6 +216,8 @@ struct oa_soap_handler
         uint desired_dynamic_pwr_cap;
         uint desired_derated_circuit_cap;
         uint desired_rated_circuit_cap;
+        SaHpiInt32T memErrRecFlag[16];
+        time_t server_insert_timer[16];
 };
 
 /* Structure for storing the current hotswap state of the resource */
@@ -240,9 +245,9 @@ struct oa_soap_hotswap_state {
 		if (oa_handler->shutdown_event_thread == SAHPI_TRUE) { \
 			dbg("Shutting down the OA SOAP event thread"); \
 			if (oa_mutex != NULL) \
-				g_mutex_unlock(oa_mutex); \
+				wrap_g_mutex_unlock(oa_mutex); \
 			if (hnd_mutex != NULL) \
-				g_mutex_unlock(hnd_mutex); \
+				wrap_g_mutex_unlock(hnd_mutex); \
 			if (timer != NULL) \
 				g_timer_destroy(timer); \
 			g_thread_exit(NULL); \

@@ -26,6 +26,7 @@
 #include <config.h>
 #include <oh_utils.h>
 #include <oh_error.h>
+#include <sahpi_wrappers.h>
 
 #ifdef OH_DBG_MSGS
 #define dbg_uid_lock(format, ...) \
@@ -42,14 +43,14 @@
 #define uid_lock(uidmutex) \
         do { \
                 dbg_uid_lock("Locking UID mutex..."); \
-                g_static_mutex_lock(uidmutex); \
+                wrap_g_static_mutex_lock(uidmutex); \
                 dbg_uid_lock("OK. UID mutex locked."); \
         } while (0)
 
 #define uid_unlock(uidmutex) \
         do { \
                 dbg_uid_lock("Unlocking UID mutex..."); \
-                g_static_mutex_unlock(uidmutex); \
+                wrap_g_static_mutex_unlock(uidmutex); \
                 dbg_uid_lock("OK. UID mutex unlocked."); \
         } while (0)
 
@@ -60,7 +61,12 @@ typedef struct {
         SaHpiEntityPathT entity_path;
 } EP_XREF;
 
-static GStaticMutex oh_uid_lock = G_STATIC_MUTEX_INIT;
+#if GLIB_CHECK_VERSION (2, 32, 0)
+	static GMutex oh_uid_lock;
+#else
+	static GStaticMutex oh_uid_lock = G_STATIC_MUTEX_INIT;
+#endif
+
 static GHashTable *oh_ep_table;
 static GHashTable *oh_resource_id_table;
 static guint       resource_id;
@@ -163,6 +169,13 @@ SaErrorT oh_uid_initialize(void)
                 if (cc != 0) {
                         g_free(oh_uid_map_file);
                         oh_uid_map_file = 0;
+
+                        if (cc == -2) {
+                                WARN("UID map file directory does not exist.");
+                                uid_unlock(&oh_uid_lock);
+                                return -1;
+                        }
+
                         WARN( "Disabling using UID Map file." );
                         WARN( "Resource Id will not be persistent." );
                 }
@@ -446,12 +459,14 @@ static void write_ep_xref(gpointer key, gpointer value, gpointer fp)
  * This function, if a uid map file exists, reads the current value for
  * uid and intializes the memory resident uid map file from file.
  *
- * Return value: success 0, error -1.
+ * Return value: success 0, error -1, uid map file directory 
+ * does not exist -2.
  */
 static gint uid_map_from_file()
 {
         FILE *fp;
         int rval;
+	struct stat buf;
 #ifndef _WIN32
 	mode_t prev_umask;
 #endif
@@ -461,6 +476,14 @@ static gint uid_map_from_file()
         }
         fp = fopen(oh_uid_map_file, "rb");
         if(!fp) {
+		 /* Check for the existence of uid map file directory. */
+		 if(stat(VARPATH, &buf) < 0) {
+	  	 	CRIT("uid map file directory '%s' does not exist. Either "
+				"re-install the package or create the directory "
+				"maunally.", VARPATH);
+			return -2;
+		 }
+
                  /* create map file with resource id initial value */
                  WARN("uid_map file '%s' could not be opened, initializing", oh_uid_map_file);
 #ifndef _WIN32

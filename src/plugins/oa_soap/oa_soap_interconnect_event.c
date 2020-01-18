@@ -60,6 +60,7 @@
  */
 
 #include "oa_soap_interconnect_event.h"
+#include "sahpi_wrappers.h"
 
 /**
  * process_interconnect_reset_event
@@ -224,7 +225,7 @@ SaErrorT process_interconnect_power_event(struct oh_handler_state *oh_handler,
                 oh_get_resource_data(oh_handler->rptcache,
                                      event.resource.ResourceId);
         if (hotswap_state == NULL) {
-                err("blade private info is NULL");
+                err("interconnect private info is NULL");
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -397,7 +398,7 @@ SaErrorT process_interconnect_insertion_event(struct oh_handler_state
         }
 
         /* Build the inserted interconnect RPT entry */
-        rv = build_interconnect_rpt(oh_handler, con, response.name,
+        rv = build_inserted_intr_rpt(oh_handler, con, response.name,
                                     bay_number, &resource_id, TRUE);
         if (rv != SA_OK) {
                 err("Failed to build the interconnect RPT");
@@ -412,7 +413,7 @@ SaErrorT process_interconnect_insertion_event(struct oh_handler_state
                  response.serialNumber, resource_id, RES_PRESENT);
 
         /* Build the inserted interconnect RDRs */
-        rv = build_interconnect_rdr(oh_handler, con,
+        rv = build_inserted_interconnect_rdr(oh_handler, con,
                                     bay_number, resource_id, TRUE);
         if (rv != SA_OK) {
                 err("Failed to build the interconnect RDR");
@@ -535,7 +536,7 @@ SaErrorT process_interconnect_info_event(struct oh_handler_state
         strcpy(serial_number, oa_event->eventData.interconnectTrayInfo.serialNumber);
         serial_number[len]='\0';
         if (strcmp(serial_number,"[Unknown]") == 0 )  {
-                g_free(serial_number);
+                wrap_g_free(serial_number);
                 return SA_ERR_HPI_OUT_OF_MEMORY;
         }
         name = oa_event->eventData.interconnectTrayInfo.name;
@@ -543,11 +544,11 @@ SaErrorT process_interconnect_info_event(struct oh_handler_state
          resource_id = oa_handler->
                 oa_soap_resources.interconnect.resource_id[bay_number - 1];
         /* Build the inserted interconnect RPT entry */
-        rv = build_interconnect_rpt(oh_handler, con, name,
+        rv = build_inserted_intr_rpt(oh_handler, con, name,
                                     bay_number, &resource_id, TRUE);
         if (rv != SA_OK) {
                 err("Failed to build the interconnect RPT");
-                g_free(serial_number);
+                wrap_g_free(serial_number);
                 return rv;
         }
 
@@ -562,10 +563,10 @@ SaErrorT process_interconnect_info_event(struct oh_handler_state
          * So just go ahead and correct it. When building the RDR the code does
          * take care of already existing RDR. 
          */
-        rv = build_interconnect_rdr(oh_handler, con,
+        rv = build_inserted_interconnect_rdr(oh_handler, con,
                                     bay_number, resource_id, FALSE);
 	
-        g_free(serial_number);
+        wrap_g_free(serial_number);
         return SA_OK;
 
 
@@ -648,7 +649,7 @@ void oa_soap_proc_interconnect_status(struct oh_handler_state *oh_handler,
 
         resource_id = oa_handler->oa_soap_resources.interconnect.
 			resource_id[status->bayNumber - 1];
-        /* Get the rpt entry of the server */
+        /* Get the rpt entry of the interconnect */
         rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
         if (rpt == NULL) {
                 err("resource RPT is NULL");
@@ -658,7 +659,7 @@ void oa_soap_proc_interconnect_status(struct oh_handler_state *oh_handler,
         hotswap_state = (struct oa_soap_hotswap_state *)
                 oh_get_resource_data(oh_handler->rptcache, resource_id);
         if (hotswap_state == NULL) {
-                err("Failed to get hotswap state of server blade");
+                err("Failed to get hotswap state of interconnect");
                 return;
         }
 

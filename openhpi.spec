@@ -2,32 +2,17 @@
 
 Summary:        Hardware Platform Interface library and tools
 Name:           openhpi
-Version:        3.4.0
-Release:        4%{?dist}.1
+Version:        3.7.0
+Release:        5%{?dist}
 License:        BSD
 Group:          System Environment/Base
 URL:            http://www.openhpi.org
 Source0:        http://downloads.sourceforge.net/%{name}/%{name}-%{version}.tar.gz
 # convert from initscript to systemd unit
 Patch0:         %{name}-3.4.0-systemd.patch
-# https://sourceforge.net/p/openhpi/bugs/1807/
-Patch1:         %{name}-3.4.0-docs.patch
-# https://sourceforge.net/p/openhpi/bugs/1850/
-Patch2:         %{name}-3.4.0-man.patch
-# https://sourceforge.net/p/openhpi/bugs/1881/
-Patch3:         %{name}-3.4.0-hpisettime.patch
-# https://sourceforge.net/p/openhpi/bugs/1834/
-Patch4:         %{name}-3.4.0-accept.patch
-# https://sourceforge.net/p/openhpi/bugs/1899/
-Patch5:         %{name}-3.4.0-hpithres.patch
-# https://sourceforge.net/p/openhpi/bugs/1907/
-Patch6:         %{name}-3.4.0-sysfs.patch
-# https://sourceforge.net/p/openhpi/bugs/1900/
-Patch7:         %{name}-3.4.0-hpishell.patch
-# https://sourceforge.net/p/openhpi/bugs/1869/
-Patch8:         %{name}-3.4.0-mutex.patch
-# https://sourceforge.net/p/openhpi/bugs/1916/
-Patch9:         %{name}-3.4.0-umask.patch
+# https://sourceforge.net/p/openhpi/bugs/1914/ breaks %%check
+Patch1:         %{name}-3.7.0-uid-revert.patch
+Patch2:         %{name}-3.7.0-multilib.patch
 BuildRequires:  libsysfs-devel
 BuildRequires:  net-snmp-devel
 BuildRequires:  OpenIPMI-devel
@@ -38,8 +23,13 @@ BuildRequires:  ncurses-devel
 BuildRequires:  libxml2-devel
 BuildRequires:  docbook-utils
 BuildRequires:  libuuid-devel
+BuildRequires:  librabbitmq-devel
+BuildRequires:  json-c-devel
+BuildRequires:  libcurl-devel
 BuildRequires:  systemd
 BuildRequires:  autoconf automake libtool
+BuildRequires:  libgcrypt-devel
+BuildRequires:  net-snmp
 Requires(post):         systemd
 Requires(preun):        systemd
 Requires(postun):       systemd
@@ -82,25 +72,23 @@ The development libraries and header files for the OpenHPI project.
 %prep
 %setup -q
 %patch0 -p1 -b .systemd
-%patch1 -p1 -b .docs
-%patch2 -p1 -b .man
-%patch3 -p1 -b .hpisettime
-%patch4 -p1 -b .accept
-%patch5 -p1 -b .hpithres
-%patch6 -p1 -b .sysfs
-%patch7 -p1 -b .hpishell
-%patch8 -p1 -b .mutex
-%patch9 -p1 -b .umask
+%patch1 -p1 -b .uid-revert
+%patch2 -p1 -b .multilib
 
-# workaround dependecies between manually modified autotooled files
-#touch aclocal.m4
-#touch config.h.in
-#touch configure
 autoreconf -vif
 
 # fix permissions
 chmod a-x plugins/simulator/*.[ch]
 chmod a-x clients/*.[ch]
+
+# Fix ownership of config files and dirs for building/running tests as root
+# Due to security check the daemon breaks with error if the config file
+# does not belong to the current user.
+# https://bugzilla.redhat.com/show_bug.cgi?id=1267928
+if [ $UID -eq 0 ]; then
+    find . -name openhpi.conf -exec chown root:root {} \;
+    find . -name openhpi.conf -execdir chown root:root . \;
+fi
 
 
 %build
@@ -168,8 +156,29 @@ make check
 
 
 %changelog
-* Fri Oct 07 2016 Rafael Fonseca <rdossant@redhat.com> - 3.4.0-4.1
-- Resolves: rhbz#1382340 - openhpi creates logs with 666 permissions
+* Mon Jan 08 2018 Than Ngo <than@redhat.com> - 3.7.0-5
+- Related: #1507619, add BR on net-snmp to fix the
+  undefined reference issue
+
+* Wed Dec 20 2017 Than Ngo <than@redhat.com> - 3.7.0-4
+- Related: #1507619, fix multilib issue
+
+* Wed Dec 20 2017 Than Ngo <than@redhat.com> - 3.7.0-3
+- Related: #1507619, enable file encryption (missing hpicrypt)
+
+* Tue Dec 05 2017 Than Ngo <than@redhat.com> - 3.7.0-2
+- Related: #1507619, enable ov_rest plugin
+
+* Thu Nov 16 2017 Dan Horák <dhorak@redhat.com> - 3.7.0-1
+- rebased to 3.7.0 (#1507619)
+- fix test-suite run under root (#1267928)
+- Resolves: #1507619, #1267928
+
+* Thu Nov 16 2017 Than Ngo <than@redhat.com> - 3.4.0-6
+- Resolves: rhbz#1267928, internal testsuite failure
+
+* Wed Oct 05 2016 Rafael Fonseca <rdossant@redhat.com> - 3.4.0-5
+- Resolves: rhbz#1374680 - openhpi creates logs with 666 permissions
 
 * Tue Jun 21 2016 Rafael Fonseca <rdossant@redhat.com> - 3.4.0-4
 - Resolves: rhbz#1255041

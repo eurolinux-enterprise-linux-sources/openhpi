@@ -30,6 +30,7 @@
 #include "init.h"
 #include "lock.h"
 #include "session.h"
+#include <sahpi_wrappers.h>
 
 
 /***************************************************************
@@ -102,7 +103,11 @@ private:
     SaHpiDomainIdT  m_did;
     SaHpiSessionIdT m_sid;
     SaHpiSessionIdT m_remote_sid;
+#if GLIB_CHECK_VERSION (2, 32, 0)
+    GPrivate        m_sockets;
+#else
     GStaticPrivate  m_sockets;
+#endif
 };
 
 
@@ -112,12 +117,16 @@ cSession::cSession()
       m_sid( 0 ),
       m_remote_sid( 0 )
 {
-    g_static_private_init( &m_sockets );
+    #if GLIB_CHECK_VERSION (2, 32, 0)
+    m_sockets = G_PRIVATE_INIT (g_free);
+    #else
+    wrap_g_static_private_init( &m_sockets );
+    #endif
 }
 
 cSession::~cSession()
 {
-    g_static_private_free( &m_sockets );
+    wrap_g_static_private_free( &m_sockets );
 }
 
 SaErrorT cSession::GetEntityRoot( SaHpiEntityPathT& entity_root ) const
@@ -204,7 +213,11 @@ SaErrorT cSession::DoRpc( uint32_t id,
             }
         }
 
-        g_static_private_set( &m_sockets, 0, 0 ); // close socket
+        #if GLIB_CHECK_VERSION (2, 32, 0)
+        wrap_g_static_private_set( &m_sockets, 0);// close socket
+        #else
+        wrap_g_static_private_set( &m_sockets, 0, 0 ); // close socket
+        #endif
         g_usleep( NEXT_RPC_ATTEMPT_TIMEOUT );
     }
     if ( !rc ) {
@@ -227,7 +240,7 @@ SaErrorT cSession::DoRpc( uint32_t id,
 
 SaErrorT cSession::GetSock( cClientStreamSock * & sock )
 {
-    gpointer ptr = g_static_private_get( &m_sockets );
+    gpointer ptr = wrap_g_static_private_get( &m_sockets );
     if ( ptr ) {
         sock = reinterpret_cast<cClientStreamSock *>(ptr);
     } else {
@@ -253,7 +266,11 @@ SaErrorT cSession::GetSock( cClientStreamSock * & sock )
                                      /* keepalive_intvl */  1,
                                      /* keepalive_probes */ 3 );
 
-        g_static_private_set( &m_sockets, sock, DeleteSock );
+        #if GLIB_CHECK_VERSION (2, 32, 0)
+        wrap_g_static_private_set( &m_sockets, sock );
+        #else
+        wrap_g_static_private_set( &m_sockets, sock, DeleteSock );
+        #endif
     }
 
     return SA_OK;

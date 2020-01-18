@@ -80,7 +80,11 @@ static xmlChar *ir_xml_smb_get_value( char *, xmlNodePtr);
 static int ir_xml_insert_logininfo( char *, int, char *, char *, char *);
 static int ir_xml_extract_index( char *, char *, int);
 static int ir_xml_replacestr( char **, char *);
-
+static int ir_xml_iml_write( struct oh_handler_state*,xmlNodePtr);
+static SaErrorT ilo2_ribcl_iml_event( xmlNodePtr n,char *host, 
+					struct oh_handler_state*,
+					SaHpiEntityPathT *, char *severity,
+					SaHpiTimeT sec);
 /* Error return values for ir_xml_extract_index */
 #define IR_NO_PREFIX	-1
 #define IR_NO_INDEX	-2
@@ -110,7 +114,8 @@ char *ir_xml_cmd_templates[] = {
 	[IR_CMD_SERVER_AUTO_PWR_60]	ILO2_RIBCL_SERVER_AUTO_PWR_60,
 	[IR_CMD_SERVER_AUTO_PWR_RANDOM]	ILO2_RIBCL_SERVER_AUTO_PWR_RANDOM,
 	[IR_CMD_SERVER_AUTO_PWR_RESTORE]	ILO2_RIBCL_SERVER_AUTO_PWR_RESTORE,
-	[IR_CMD_SERVER_AUTO_PWR_OFF]	ILO2_RIBCL_SERVER_AUTO_PWR_OFF
+	[IR_CMD_SERVER_AUTO_PWR_OFF]	ILO2_RIBCL_SERVER_AUTO_PWR_OFF,
+	[IR_CMD_GET_EVENT_LOG]    ILO2_RIBCL_GET_EVENT_LOG
 		};
 /**
  * ir_xml_parse_status
@@ -1416,7 +1421,9 @@ static int ir_xml_record_fandata( ilo2_ribcl_handler_t *ir_handler,
          * DiscoveryData, update DiscoveryData with the latest info */
 
 	fandat = &(ir_handler->DiscoveryData.fandata[fanindex]);
-	fandat->fanflags |= IR_DISCOVERED;
+	if(strcmp(fanstat, "Not Installed") && strcmp(fanstat, "Unknown")){
+		fandat->fanflags |= IR_DISCOVERED;
+	}
 
 	speedval = atoi(fanspeed);
 	if( fandat->speed != speedval){
@@ -1917,10 +1924,15 @@ static int ir_xml_record_vrmdata( ilo2_ribcl_handler_t *ir_handler,
 
 	ret = sscanf( (char *)vrmlabel, "VRM %d", &vrmindex);
 	if( ret != 1){
-		/* We didn't parse the VRM label correctly */
-		err("ir_xml_record_vrmdata: incorrect VRM label string: %s",
-			vrmlabel);
-		return( -1);
+               /* Some times the format of the VRM label is 'VRM (CPUn)'
+                * where is n is an integer value begining with 1. */
+               ret = sscanf( (char *)vrmlabel, "VRM (CPU%d)", &vrmindex);
+               if( ret != 1){
+                      /* We didn't parse the VRM label correctly */
+		      err("ir_xml_record_vrmdata: incorrect VRM label "
+                          "string: %s", vrmlabel);
+		      return( -1);
+               }
 	}
 
 	/* The index for this VRM should be between 1 and
@@ -1982,6 +1994,7 @@ static int ir_xml_scan_power( ilo2_ribcl_handler_t *ir_handler,
 	int ret;
 	xmlChar *lbl = NULL;
 	xmlChar *stat = NULL;
+	xmlChar *present = NULL;
 
 	p_node = ir_xml_find_node( eh_data_node, "POWER_SUPPLIES");
 
@@ -2000,6 +2013,12 @@ static int ir_xml_scan_power( ilo2_ribcl_handler_t *ir_handler,
 				stat = xmlGetProp( n, (const xmlChar *)"VALUE");
 			}
 
+			n =  ir_xml_find_node( p_node, "PRESENT");
+			if( n != NULL){
+				present = xmlGetProp( n, (const xmlChar *)
+				                      "VALUE");
+			}
+
 			/* XXX REVISIT - confirm that "Not Installed" is the
 			 * correct string when the power supply is removed. */
 			/*The iLO3 output for the power supply has
@@ -2007,16 +2026,25 @@ static int ir_xml_scan_power( ilo2_ribcl_handler_t *ir_handler,
 			 *about, the same is filtered-out here
 			 */
 			if( xmlStrcmp( lbl, (xmlChar *)"Power Supplies") != 0)
-			if( xmlStrcmp( stat, (xmlChar *)"Not Installed") != 0 ){	
+			if((xmlStrcmp(stat, (xmlChar *)"Not Installed") != 0) ||
+			   ((xmlStrcmp( stat, (xmlChar *)"Unknown") != 0) && 
+                            ((present != NULL) && 
+                            (xmlStrcmp( present, (xmlChar *)"No"))))) {
 				ret = ir_xml_record_psdata( ir_handler,
 						(char *)lbl, (char *)stat);
 			}
 
 			if( lbl){
 				xmlFree( lbl);
+				lbl = NULL;;
 			}
 			if( stat){
 				xmlFree( stat);
+				stat = NULL;
+			}
+			if( present ){
+				xmlFree( present);
+				present = NULL;
 			}
 
 			if( ret != RIBCL_SUCCESS){
@@ -2087,7 +2115,9 @@ static int ir_xml_record_psdata( ilo2_ribcl_handler_t *ir_handler,
 	 * DiscoveryData, update DiscoveryData with the latest info */
 
 	psudat = &(ir_handler->DiscoveryData.psudata[psindex]);
-	psudat->psuflags |= IR_DISCOVERED;
+	if(strcmp(psstat, "Not Installed") && strcmp(psstat, "Unknown")){
+		psudat->psuflags |= IR_DISCOVERED;
+	}
 
 	if( ir_xml_replacestr( &(psudat->label), pslabel) != RIBCL_SUCCESS){
 		return( -1);
@@ -2358,7 +2388,7 @@ static int ir_xml_scan_smbios_4( ilo2_ribcl_handler_t *ir_handler,
 {
 
 	xmlChar *cpu = NULL;
-	xmlChar *cpu_speed = NULL;
+	char *cpu_speed = NULL;
 	int ret;
 	int procnum = 0;
 
@@ -2372,7 +2402,7 @@ static int ir_xml_scan_smbios_4( ilo2_ribcl_handler_t *ir_handler,
 	 * technology for the CPU. However, this data is only provided
 	 * for processor 1. */
 
-	cpu_speed = ir_xml_smb_get_value( "Speed", b_node);
+	cpu_speed = (char *) ir_xml_smb_get_value( "Speed", b_node);
 
 	/* Find the index of this processor. The label returned in string
 	 * 'cpu' above should be of the form 'Proc N'.
@@ -2395,7 +2425,15 @@ static int ir_xml_scan_smbios_4( ilo2_ribcl_handler_t *ir_handler,
 		return( -1);
 	}
 
-	ir_handler->DiscoveryData.cpudata[ procnum].cpuflags |= IR_DISCOVERED;
+	/* When the processor is not there, speed is shown as "0 MHz" */
+	if(cpu_speed != NULL ){
+       		if(strcmp(cpu_speed, "0 MHz")){
+                	ir_handler->DiscoveryData.cpudata[procnum].cpuflags |=
+                        	IR_DISCOVERED;
+        	}
+	} else {
+		dbg("CPU %d not getting added as speed is 0",procnum);
+	}
 
 	/* Now, if this information is different than what's already in
 	 * DiscoveryData, update DiscoveryData with the latest info */
@@ -3122,6 +3160,344 @@ char* ir_xml_decode_chunked(char *d_response)
 	new_buffer[++j] = '\0';
 	return new_buffer;
 } /* end ir_xml_decode_chunked() */
+
+/**
+ * ir_xml_parse_iml
+ * @oh_handler: Ptr to this instance's custom handler.
+ * @ribcl_outbuf: Ptr to the raw RIBCL output from the GET_EVENT_LOG cmd
+ *
+ * Parses the output of the RIBCL GET_EVENT_LOG command. 
+ * Gets the pointer of the node "EVENT_LOG" in response data.
+ *
+ * Return value: RIBCL_SUCCESS on success, -1 if error.
+ **/
+int ir_xml_parse_iml( struct oh_handler_state *oh_handler, char *ribcl_outbuf)
+{
+        xmlDocPtr doc = NULL;
+        xmlNodePtr iml_data_node = NULL;
+        ilo2_ribcl_handler_t *ir_handler = NULL;
+
+        ir_handler = (ilo2_ribcl_handler_t *) oh_handler->data;
+
+
+	/* Convert the RIBCL command output into a single XML document,
+	 * and the use the libxml2 parser to create an XML doc tree. */
+
+	doc = ir_xml_doparse( ribcl_outbuf);
+	if( doc == NULL){
+                err("ir_xml_parse_iml(): Null doc returned.");
+		return( -1);
+	}
+
+	/* Check all RESULTS sections in the output for a status value
+	 * of zero, which indicates success. */
+
+        if( ir_xml_checkresults_doc( doc, ir_handler->ilo2_hostport)
+            != RIBCL_SUCCESS){
+            err("ir_xml_parse_iml(): Unsuccessful RIBCL status.");
+            xmlFreeDoc( doc);
+            return( -1);
+	}
+
+	/* Locate the EVENT_LOG subtree. It will contain
+	 * the useful results of the command. */
+
+	iml_data_node = ir_xml_find_node( xmlDocGetRootElement(doc),
+					    "EVENT_LOG");
+
+	if( iml_data_node == NULL){
+		err("ir_xml_parse_iml(): EVENT_LOG element not found."); 
+		xmlFreeDoc( doc);
+		return( -1);
+	}
+
+	if( ir_xml_iml_write( oh_handler, iml_data_node) != RIBCL_SUCCESS){
+		xmlFreeDoc( doc);
+		return( -1);
+	}
+	xmlFreeDoc( doc);
+	return( RIBCL_SUCCESS);
+}
+
+/**
+* ir_xml_iml_write
+* @oh_handler: Ptr to this instance's custom handler
+* @iml_data_node: Points to EVENT_LOG subtree in the output xml
+*
+* Examines all the EVENT sub tree and writes the severity,class,
+* last_update,initial_update,count,description of the event in
+* the IML.Any new entry related to DIMM error is added to the list.
+* Return value: 
+*        RIBCL_SUCCESS if success, 
+*        SA_ERR_HPI_INTERNAL_ERROR if no entity root
+*        -1 if error.
+**/
+static int ir_xml_iml_write( struct oh_handler_state *oh_handler,
+                               xmlNodePtr iml_data_node)
+{
+    xmlNodePtr evt_node = NULL, tmp=NULL;
+    xmlNodePtr n = NULL;
+    xmlChar *severity = NULL, *class=NULL;
+    xmlChar *last_update = NULL;
+    SaErrorT  ret = SA_OK;
+    SaHpiEntityPathT ep_root;
+    ilo2_ribcl_handler_t *ir_handler = NULL;
+    struct tm time = {0,0,0,0,0,0,0,0,-1};
+    SaHpiTimeT seconds = 0;
+    SaHpiTimeT tmp_time;
+    SaHpiTimeT local_time = 0;
+
+    ir_handler = (ilo2_ribcl_handler_t *) oh_handler->data;
+    memset( &ep_root, 0, sizeof(SaHpiEntityPathT)); 	
+    ret = oh_encode_entitypath(ir_handler->entity_root, &ep_root);
+    if( ret != SA_OK){
+        err("ir_xml_iml_write(): Cannot convert entity path %s.", \
+                ir_handler->entity_root);
+        return(SA_ERR_HPI_INTERNAL_ERROR);
+    }
+
+
+    evt_node = ir_xml_find_node( iml_data_node, "EVENT");
+    if( evt_node == NULL)
+        return ( -1);
+
+    if ( !ir_handler->iml_log_time){
+        tmp= evt_node;
+        while (tmp){
+            if((!xmlStrcmp( tmp->name, (const xmlChar *)"EVENT"))){
+                n =  ir_xml_find_node(tmp, "EVENT");
+                if( n != NULL){
+		    last_update = xmlGetProp(n, (const xmlChar *)"LAST_UPDATE");
+	            time = (struct tm){0,0,0,0,0,0,0,0,-1};
+	            strptime((const char*) last_update,"%m/%d/%Y %H:%M", &time);
+	            tmp_time = mktime( &time) * 1000000000LL;
+	            if (tmp_time > ir_handler->iml_log_time)
+	                ir_handler->iml_log_time = tmp_time;
+	        }
+            }
+            tmp=tmp->next;
+        }
+	/* If no events are present, set iml_log_time to process first event */
+	if (!ir_handler->iml_log_time)
+            ir_handler->iml_log_time = 1;
+	dbg("iml_log_time is %lli",(long long int)ir_handler->iml_log_time);
+
+    }
+    local_time =  ir_handler->iml_log_time;
+
+    while( evt_node != NULL){
+        if((!xmlStrcmp( evt_node->name, (const xmlChar *)"EVENT"))){
+            n =  ir_xml_find_node(evt_node, "EVENT");
+            if( n != NULL){
+                severity = xmlGetProp( n, (const xmlChar *)"SEVERITY");
+                class = xmlGetProp( n, (const xmlChar *)"CLASS");
+                last_update = xmlGetProp( n, (const xmlChar *)"LAST_UPDATE");
+                time = (struct tm){0,0,0,0,0,0,0,0,-1};
+                strptime((const char*) last_update,"%m/%d/%Y %H:%M", &time);
+                seconds = mktime( &time) * 1000000000LL;
+                if( seconds > ir_handler->iml_log_time)
+                {
+
+                    if (seconds > local_time)
+                        local_time = seconds;
+		    if ( !xmlStrcmp( class, (const xmlChar *)"Power") ||
+                          !xmlStrcmp( class, (const xmlChar *)"Environment")) {
+			ir_handler->need_rediscovery = TRUE;
+			
+                    }
+			
+                    if(!xmlStrcmp( severity, (const xmlChar *)"Caution")||
+                            !xmlStrcmp( severity,(const xmlChar *)"Critical")){
+			ir_handler->need_rediscovery = TRUE;
+                        ret = ilo2_ribcl_iml_event(n,ir_handler->ilo2_hostport,
+                                                        oh_handler, &ep_root,
+                                                        (char *)severity,
+                                                         seconds);
+
+                        if( ret != SA_OK){
+                            err("ilo2_ribcl_iml_event():failed");
+                            if(local_time > ir_handler->iml_log_time)
+                                  ir_handler->iml_log_time = local_time;
+                            return ( -1); 
+                        }
+                    } 
+                }
+
+                /* In a while loop, free and set the pointer to NULL */
+                if( severity){
+                    xmlFree(severity);
+                    severity = NULL;
+                } 
+                if( class){
+                    xmlFree(class);
+                    class = NULL;
+                } 
+                if( last_update){
+                    xmlFree(last_update);
+                    last_update = NULL;
+                } 
+            }
+        }
+
+	evt_node = evt_node->next;
+
+    }/* end while evt_node != NULL */
+
+    if(local_time > ir_handler->iml_log_time)
+        ir_handler->iml_log_time = local_time;
+    return( RIBCL_SUCCESS);
+
+} /** end of ir_xml_iml_write()**/
+
+/**
+ *ilo2_ribcl_iml_event
+ *n - pointer to IML xml data oA
+ *host - Pointer to host IP
+ *@oh_handler:  Handler data pointer.
+ *@resource_ep: pointer to the entity path for this resource.
+ * 
+ *Detailed description:
+ *	- Look up the existing rpt entry from the resource_ep entity
+ *	  path parameter.
+ *	- Call oh_evt_queue_push() to push IML error details to event queue.
+ *
+ *Return values:
+ *	SA_OK if success
+ *	SA_ERR_HPI_OUT_OF_MEMORY if allocation fails.
+ *	SA_ERR_HPI_NOT_PRESENT if the rpt entry for resource_ep is not found.
+ **/
+static SaErrorT ilo2_ribcl_iml_event(xmlNodePtr n, char *host,
+					struct oh_handler_state *oh_handler,
+                                       SaHpiEntityPathT *resource_ep, 
+				        char *severity, SaHpiTimeT sec)
+{
+	struct oh_event *ev = NULL;
+	SaHpiRptEntryT *rpt = NULL;
+	SaHpiSensorReadingT current_reading = {0};
+	xmlChar *class = NULL;
+	xmlChar *last_update = NULL;
+	xmlChar *initial_update = NULL;
+	xmlChar *count = NULL;
+	xmlChar *description = NULL;
+	SaHpiSensorTypeT type;
+	char log_desc[SAHPI_SENSOR_BUFFER_LENGTH] = {0};
+
+	rpt = oh_get_resource_by_ep( oh_handler->rptcache,
+		resource_ep);
+	if( rpt == NULL){
+		/* This should never happen */
+            err("ilo2_ribcl_iml_event(): Null rpt entry for failed resource");
+            return( SA_ERR_HPI_NOT_PRESENT);
+	}
+
+
+	ev = oh_new_event();
+	if( ev == NULL){
+		err("ilo2_ribcl_iml_event(): event allocation failed.");
+		return( SA_ERR_HPI_OUT_OF_MEMORY);
+	}
+
+	class = xmlGetProp( n, (const xmlChar *)"CLASS");
+	last_update = xmlGetProp( n, (const xmlChar *)"LAST_UPDATE");
+	initial_update = xmlGetProp( n, (const xmlChar *)"INITIAL_UPDATE");
+	count = xmlGetProp( n, (const xmlChar *)"COUNT");
+	description = xmlGetProp( n, (const xmlChar *)"DESCRIPTION");
+
+
+	if( !xmlStrcmp( class, (const xmlChar *)"Main Memory") || 
+		!xmlStrcmp(class, (const xmlChar *)"Cache Memory") || 
+		 !xmlStrcmp( class, (const xmlChar *)"Non-Volatile Memory")){
+               	 	type = SAHPI_MEMORY;
+	}else if(!xmlStrcmp(class, (const xmlChar *)"Environment") || 
+		  !xmlStrcmp(class, (const xmlChar *)"POST Message")){
+                	type = SAHPI_SYSTEM_EVENT;
+	}else if( !xmlStrcmp( class, (const xmlChar *)"Power")){
+                	type = SAHPI_POWER_SUPPLY;
+	} else if(!xmlStrcmp(class, (const xmlChar *)"OS")){
+                	type= SAHPI_OS_CRITICAL_STOP;
+	}else if(!xmlStrcmp(class, (const xmlChar *)"Maintenance")){
+                type = SAHPI_MANAGEMENT_SUBSYSTEM_HEALTH;
+	}else if(!xmlStrcmp(class, (const xmlChar *)"Drive Array") ||
+		  !xmlStrcmp(class, (const xmlChar *)"Expansion Slot")){
+                	type = SAHPI_DRIVE_SLOT;
+	}else if(!xmlStrcmp(class, (const xmlChar *)"System Error")){
+                	type = SAHPI_PLATFORM_VIOLATION;
+	}else if(!xmlStrcmp(class, (const xmlChar *)"PCI Bus")){
+                	type = SAHPI_COMM_CHANNEL_BUS_STATE;
+	}else if(!xmlStrcmp(class, (const xmlChar *)"Host Bus")){
+                	type = SAHPI_MANAGEMENT_BUS_STATE;
+	}else if(!xmlStrcmp(class, (const xmlChar *)"Network")){
+                	type = SAHPI_LAN;
+	}else if(!xmlStrcmp(class, (const xmlChar *)"Power Cap")){
+                	type = SAHPI_POWER_BUDGET;
+	}else if(!xmlStrcmp(class, (const xmlChar *)"ASR")){
+			type = SAHPI_OS_BOOT;
+	}else if(!xmlStrcmp(class, (const xmlChar *)"UPS")){
+			type = SAHPI_BATTERY;
+	}else {
+			err("Unknown IML event");
+			type = SAHPI_OTHER_UNITS_BASED_SENSOR;
+	}
+
+	err("%s error in %s",
+                        class,host);
+	err("Severity:%s,Class:%s", severity, class);
+	err("LastUpdte: %s,IntialUpdte: %s,Count:%s",
+                  last_update, initial_update, count);
+	err("Description:\"%s\"", description);
+
+	if(description)
+	          dbg("description = %s", description);
+        else
+	          dbg("description is NULL");
+	strncpy(log_desc,(const char *)description,
+                   SAHPI_SENSOR_BUFFER_LENGTH-1);
+        ev->resource = *rpt;
+        ev->hid = oh_handler->hid;
+        ev->event.Source = ev->resource.ResourceId;
+        ev->event.EventType = SAHPI_ET_SENSOR;
+	if( strcmp( severity,"Critical") == 0)
+                ev->event.Severity = SAHPI_CRITICAL;
+	else if( strcmp( severity,"Caution") == 0)
+                ev->event.Severity = SAHPI_MAJOR; 
+        
+        if( sec < 0)
+            ev->event.Timestamp = SAHPI_TIME_UNSPECIFIED;
+        else
+            ev->event.Timestamp = sec;	
+
+        ev->event.EventDataUnion.SensorEvent.OptionalDataPresent =
+                        SAHPI_SOD_TRIGGER_READING;
+        ev->event.EventDataUnion.SensorEvent.SensorType = 
+                        type;
+        current_reading.IsSupported = SAHPI_TRUE;
+        current_reading.Type = 
+                            SAHPI_SENSOR_READING_TYPE_BUFFER;
+	strncpy((char *) current_reading.Value.SensorBuffer, log_desc,
+						SAHPI_SENSOR_BUFFER_LENGTH);
+        ev->event.EventDataUnion.SensorEvent.TriggerReading = current_reading;
+        oh_evt_queue_push(oh_handler->eventq, ev);
+
+        if( class){
+            xmlFree( class);
+        }
+        if( last_update){
+            xmlFree( last_update);
+        }
+        if( initial_update){
+            xmlFree( initial_update);
+        }
+        if( count){
+            xmlFree( count);
+        }
+        if( description){
+            xmlFree( description);
+        }
+
+        return( SA_OK);
+
+} /* end ilo2_ribcl_iml_event() */
+
 
 /**
  * hextodec

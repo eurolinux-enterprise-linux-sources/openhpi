@@ -55,7 +55,7 @@ MOSTLYCLEANFILES = @TEST_CLEAN@
 # FIXME:: Add when we can auto-generate files for SMP systems
 # MOSTLYCLEANFILES += $(GENERATED_FILES)
 
-INCLUDES = @OPENHPI_INCLUDES@
+AM_CPPFLAGS += @OPENHPI_INCLUDES@
 
 SUBDIRS = t
 DIST_SUBDIRS = t
@@ -88,6 +88,8 @@ libopenhpiutils_la_SOURCES = \
     sahpi_time_utils.h \
     sahpi_gcrypt_utils.c \
     sahpi_gcrypt_utils.h \
+    sahpi_wrappers.c \
+    sahpi_wrappers.h \
     uid_utils.c \
     uid_utils.h
 

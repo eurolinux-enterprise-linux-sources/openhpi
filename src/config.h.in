@@ -6,6 +6,12 @@
 /* openhpi specific config path */
 #undef CONFPATH
 
+/* Define to 1 if you have the <amqp.h> header file. */
+#undef HAVE_AMQP_H
+
+/* Define to 1 if you have the <curl/curl.h> header file. */
+#undef HAVE_CURL_CURL_H
+
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
 
@@ -23,6 +29,9 @@
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
+
+/* Define to 1 if you have the <json-c/json.h> header file. */
+#undef HAVE_JSON_C_JSON_H
 
 /* Define to 1 if you have the <libxml2/libxml/xmlexports.h> header file. */
 #undef HAVE_LIBXML2_LIBXML_XMLEXPORTS_H
@@ -123,6 +132,9 @@
 
 /* Define to the one symbol short name of this package. */
 #undef PACKAGE_TARNAME
+
+/* Define to the home page for this package. */
+#undef PACKAGE_URL
 
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION

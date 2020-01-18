@@ -46,7 +46,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "oh_clients.h"
 
-#define OH_SVN_REV "$Revision: 7291 $"
+#define OH_SVN_REV "$Revision: 7633 $"
 
 static gchar *findate = NULL;
 static gchar *fintime = NULL;
@@ -101,7 +101,7 @@ int main(int argc, char **argv)
         g_option_context_free (context);
 
 	if ( !findate || !fintime) {
-		CRIT("Please enter date and time to be set.");
+		CRIT("Please enter date and time to be set, or try --help.");
 		EXIT1;
 	}
 
@@ -168,7 +168,7 @@ int main(int argc, char **argv)
            DBG("New date and time in SaHpiTimeT %" PRId64 "\n", (int64_t)newtime);
 
         rv = ohc_session_open_by_option ( &copt, &sessionid);
-	if (rv != SA_OK) EXIT1;
+	if (rv != SA_OK) { EXIT1; }
 
 	if (copt.debug) DBG("saHpiDiscover");
 	rv = saHpiDiscover(sessionid);

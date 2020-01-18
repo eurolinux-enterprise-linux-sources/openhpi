@@ -51,6 +51,9 @@
  *      build_inserted_server_rpt()       - Builds the rpt entry for inserted
  *                                          server
  *
+ *      oa_soap_parse_memory_sensor_reading() - Get the memory error from 
+ *                                          extra_data field
+ *
  *	oa_soap_proc_server_status() 	  - Processes the server status event
  *
  *	oa_soap_serv_post_comp ()	  - Processes the blade post complete 
@@ -62,7 +65,7 @@
 
 #include "oa_soap_server_event.h"
 #include "oa_soap_discover.h"           /* for build_server_rpt() prototype */
-extern time_t server_insert_timer[];
+#include "sahpi_wrappers.h"
 
 /**
  * process_server_power_off_event
@@ -420,16 +423,18 @@ SaErrorT oa_soap_proc_server_inserted_event(struct oh_handler_state *oh_handler,
                                         struct eventInfo *oa_event)
 {
         SaHpiInt32T bay_number = 0;
+        struct oa_soap_handler *oa_handler = NULL;
         time_t now = 0;
 
         if (oh_handler == NULL || con == NULL || oa_event == NULL) {
                 err("Invalid parameters");
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
+        oa_handler = (struct oa_soap_handler *) oh_handler->data;
         time(&now);
         bay_number =
                 oa_event->eventData.bladeStatus.bayNumber;
-        server_insert_timer[bay_number - 1] = now;
+        oa_handler->server_insert_timer[bay_number - 1] = now;
         return SA_OK;
 }
 
@@ -512,10 +517,10 @@ SaErrorT process_server_insert_completed(struct oh_handler_state
 
         time_t now = 0;
         time(&now);
-        int delay = now - server_insert_timer[bay_number - 1];
+        int delay = now - oa_handler->server_insert_timer[bay_number - 1];
         if (delay)
                dbg("Took %d secs to add blade at bay %d\n",delay, bay_number);
-        server_insert_timer[bay_number - 1] = 0;
+        oa_handler->server_insert_timer[bay_number - 1] = 0;
 
         /* Update resource_status structure with resource_id, serial_number,
          * and presence status
@@ -525,8 +530,8 @@ SaErrorT process_server_insert_completed(struct oh_handler_state
                       response.serialNumber, rpt.ResourceId, RES_PRESENT);
 
         /* Build the server RDR */
-        rv = build_server_rdr(oh_handler, con, bay_number, rpt.ResourceId,
-			      blade_name);
+        rv = build_inserted_server_rdr(oh_handler, con, bay_number, rpt.ResourceId,
+			      blade_name, TRUE);
         if (rv != SA_OK) {
                 err("build inserted server RDR failed");
                 /* Free the inventory info from inventory RDR */
@@ -667,12 +672,12 @@ SaErrorT process_server_info_event(struct oh_handler_state
         /* Get the rpt entry of the resource */
         rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
         if (rpt == NULL) {
-		if (server_insert_timer[bay_number-1]){
-                        g_free(serial_number);
+		if (oa_handler->server_insert_timer[bay_number-1]){
+                        wrap_g_free(serial_number);
                         return SA_OK;
 		}
 		err("server RPT NULL at bay %d",bay_number);
-                g_free(serial_number);
+                wrap_g_free(serial_number);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -683,11 +688,11 @@ SaErrorT process_server_info_event(struct oh_handler_state
          * So just go ahead and correct it. When building the RDR the code does
          * take care of already existing RDR.
          */
-        rv = build_server_rdr(oh_handler, con,
-                                    bay_number, resource_id, blade_name);
+        rv = build_inserted_server_rdr(oh_handler, con,
+                               bay_number, resource_id, blade_name, FALSE);
         if (rv != SA_OK) {
         	err("Failed to add Server rdr");
-                g_free(serial_number);
+                wrap_g_free(serial_number);
         	return rv;
         }	
 
@@ -702,7 +707,7 @@ SaErrorT process_server_info_event(struct oh_handler_state
         	rv = oh_add_resource(oh_handler->rptcache, rpt, NULL, 0);
         	if (rv != SA_OK) {
                 	err("Failed to add Server rpt");
-                        g_free(serial_number);
+                        wrap_g_free(serial_number);
                 	return rv;
         	}
 
@@ -712,7 +717,7 @@ SaErrorT process_server_info_event(struct oh_handler_state
 					SAHPI_DEFAULT_INVENTORY_ID);
 		if (rdr == NULL) {
 			err("Inventory RDR is not found");
-                        g_free(serial_number);
+                        wrap_g_free(serial_number);
 			return SA_ERR_HPI_NOT_PRESENT;
 		}
 		
@@ -735,7 +740,7 @@ SaErrorT process_server_info_event(struct oh_handler_state
                         copy_oa_soap_event(&event));
         }
 
-        g_free(serial_number);
+        wrap_g_free(serial_number);
         return SA_OK;
 }
 
@@ -830,12 +835,50 @@ SaErrorT build_inserted_server_rpt(struct oh_handler_state *oh_handler,
         rv = oh_add_resource(oh_handler->rptcache, rpt, hotswap_state, 0);
         if (rv != SA_OK) {
                 err("Failed to add Server rpt");
-                if (hotswap_state != NULL)
-                        g_free(hotswap_state);
+                wrap_g_free(hotswap_state);
                 return rv;
         }
 
         return SA_OK;
+}
+
+/**
+ * oa_soap_parse_memory_sensor_reading
+ *      @memoryErrors   : Pointer to mainMemoryErros sensor reading
+ *
+ * Purpose:
+ *      Parses main memory sensor reading
+ *
+ * Detailed Description: NA
+ *
+ * Return values:
+ *      Pointer       - on success.
+ *      NULL          - on error.
+ **/
+SaHpiUint8T *oa_soap_parse_memory_sensor_reading(char *memoryErrors)
+{
+        char *subStr = NULL, *sensor_reading = NULL;
+        int len = 0; 
+        if (memoryErrors == NULL) {
+                err("Invalid parameters");
+                return NULL;
+        }
+
+        sensor_reading = (char  *)g_malloc0
+                            (sizeof(char) * SAHPI_SENSOR_BUFFER_LENGTH);
+        memset(sensor_reading, 0, SAHPI_SENSOR_BUFFER_LENGTH);
+        subStr = strstr(memoryErrors, ";");
+        if (subStr) 
+                len = strlen(memoryErrors) - strlen(subStr);
+        else
+                len = strlen(memoryErrors);
+
+        if (len >= SAHPI_SENSOR_BUFFER_LENGTH) 
+                len = SAHPI_SENSOR_BUFFER_LENGTH - 1;
+        strncpy(sensor_reading, memoryErrors, len);
+        sensor_reading[len] = '\0';
+        
+        return (SaHpiUint8T *)sensor_reading;
 }
 
 /**
@@ -860,30 +903,106 @@ void oa_soap_proc_server_status(struct oh_handler_state *oh_handler,
 	SaHpiRptEntryT *rpt = NULL;
 	struct oa_soap_handler *oa_handler = NULL;
 	SaHpiResourceIdT resource_id;
+        SaHpiInt32T bay = 0;
 	enum diagnosticStatus diag_ex_status[OA_SOAP_MAX_DIAG_EX];
 	struct getBladeThermalInfoArray thermal_request;
 	struct bladeThermalInfoArrayResponse thermal_response;
+	xmlNode *extra_data = NULL;
+	struct extraDataInfo extra_data_info;
+        char *mainMemoryError = NULL;
+        SaHpiInt32T sensor_status, memErrFlag[16] = {0};
+        SaHpiInt32T sensor_class, sensor_value, sensor_num;
 
-	if (oh_handler == NULL || status == NULL) {
+	if (oh_handler == NULL || con == NULL || status == NULL) {
 		err("Invalid parameters");
 		return;
 	}
 
 	oa_handler = (struct oa_soap_handler *) oh_handler->data;
+        bay = status->bayNumber;
 	resource_id = oa_handler->oa_soap_resources.server.
-			resource_id[status->bayNumber - 1];
+			resource_id[bay - 1];
 	/* Get the rpt entry of the resource */
 	rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
 	if (rpt == NULL) {
                 /* RPT is null. It may yet to be added. If the timer is
                    on event comes early.  Just return */
-                if ((server_insert_timer[status->bayNumber - 1]) || 
+                if ((oa_handler->server_insert_timer[bay - 1]) || 
                     (status->powered == POWER_UNKNOWN)) {
                         return;
                 } 
-                err("RPT of Server bay at %d is NULL",status->bayNumber);
+                err("RPT of Server bay at %d is NULL",bay);
 		return;
 	}
+
+	extra_data = status->extraData;
+	while (extra_data) {
+                soap_getExtraData(extra_data, &extra_data_info);
+                if (!(strcmp(extra_data_info.name, "mainMemoryErrors"))) {
+                   err("openhpid[%d]: Blade (id=%d) at %d has Memory Error: %s",
+                    getpid(), resource_id, bay, extra_data_info.value);
+                   memErrFlag[bay - 1] = 1;
+                   oa_handler->memErrRecFlag[bay - 1] = 1;
+                   break;
+                }
+                extra_data = soap_next_node(extra_data);
+        }
+
+        if(oa_handler->memErrRecFlag[bay - 1]) {
+                /* This MEMORY event is created just to let the user
+                   know whether all memory modules are fine, if not,
+                   which memory module is generating an error */
+                if (memErrFlag[bay - 1]) {
+                    mainMemoryError = (char *)
+                    oa_soap_parse_memory_sensor_reading(extra_data_info.value);
+                    rv = oa_soap_proc_mem_evt(oh_handler, resource_id,
+                                              OA_SOAP_SEN_MAIN_MEMORY_ERRORS,
+                                              mainMemoryError, SAHPI_CRITICAL);
+                    if (rv != SA_OK) {
+                            err("processing the memory event for sensor %x has"
+                                " failed", OA_SOAP_SEN_MAIN_MEMORY_ERRORS);
+                            wrap_g_free(mainMemoryError);
+                            return;
+                    }
+                    wrap_g_free(mainMemoryError);
+                    memErrFlag[bay - 1] = 0;
+                } else {
+                    /* Get the sensor value */
+                    sensor_num = OA_SOAP_SEN_PRED_FAIL;
+                    sensor_class = oa_soap_sen_arr[sensor_num].sensor_class;
+                    sensor_value = status->operationalStatus;
+
+                    /* Check whether the sensor value is supported or not */
+                    if (oa_soap_sen_val_map_arr[sensor_class][sensor_value]
+                                                                       == -1) {
+                            err("Not supported sensor value %d detected.",
+                                                                sensor_value);
+                            return;
+                    }
+
+                    /* Get the assert state of the predictive failure sensor */
+                    sensor_status =
+                        oa_soap_sen_assert_map_arr[sensor_class][sensor_value];
+
+                    /* Check whether predictive failure gets de-asserted */
+                    if (sensor_status == OA_SOAP_SEN_ASSERT_FALSE) {
+                            /* Now predictive failure is de-asserted and
+                               there are no memory module errors, so send
+                               an event with "All Memory Modules are Ok" */
+                            mainMemoryError = "All Memory Modules are Ok";
+                            rv = oa_soap_proc_mem_evt(oh_handler, resource_id,
+                                              OA_SOAP_SEN_MAIN_MEMORY_ERRORS,
+                                              mainMemoryError, SAHPI_OK);
+                            if (rv != SA_OK) {
+                                    err("processing the memory event for "
+                                        "sensor %x has failed",
+                                         OA_SOAP_SEN_MAIN_MEMORY_ERRORS);
+                                    return;
+                            }
+                            oa_handler->memErrRecFlag[bay - 1] = 0;
+                    }
+                }
+        }
 
 	/* Process operational status sensor */
 	OA_SOAP_PROCESS_SENSOR_EVENT(OA_SOAP_SEN_OPER_STATUS,
@@ -1019,8 +1138,7 @@ void oa_soap_proc_server_status(struct oh_handler_state *oh_handler,
 							EntityLocation -1] == 
 							SAHPI_POWER_ON) {
 			dbg("Ignore the blade status event from the partner"
-			    " blade %d which is in POWER ON state",
-			    status->bayNumber);
+			    " blade %d which is in POWER ON state", bay);
 			return;
 		}
 				
@@ -1029,7 +1147,7 @@ void oa_soap_proc_server_status(struct oh_handler_state *oh_handler,
 			    " enable thermal sensors");
 
 			/* Make getBladeThermalInfoArray soap call */ 
-			thermal_request.bayNumber = status->bayNumber;
+			thermal_request.bayNumber = bay;
 			rv = soap_getBladeThermalInfoArray(con, 
 						&thermal_request, 
 						&thermal_response);
@@ -1042,8 +1160,7 @@ void oa_soap_proc_server_status(struct oh_handler_state *oh_handler,
 			if ((rv != SA_OK) ||
 			    (thermal_response.bladeThermalInfoArray == NULL)) {
 				err("getBladeThermalInfo failed for blade or"
-				    "the blade %d is not in stable state",
-				    status->bayNumber);
+				    "the blade %d is not in stable state",bay);
 				return;
 			}
 
@@ -1127,7 +1244,7 @@ void oa_soap_serv_post_comp(struct oh_handler_state
 	 * be available so that we do not miss any
 	 * temperatuer sensor.
 	 */
-	sleep(20);
+        oa_soap_sleep_in_loop(oa_handler, 20);
 
 	rv = soap_getBladeThermalInfoArray(con, &thermal_request,
 					   &thermal_response);
@@ -1139,7 +1256,7 @@ void oa_soap_serv_post_comp(struct oh_handler_state
 	 * a NULL response
 	 */
 	if ((rv != SA_OK) || (thermal_response.bladeThermalInfoArray == NULL)) {
-		err("getBladeThermalInfo failed for blade or"
+		err("getBladeThermalInfo array failed for blade or"
 		    "the blade is not in stable state");
 		return;
 	}
@@ -1351,7 +1468,7 @@ void oa_soap_proc_server_thermal(struct oh_handler_state *oh_handler,
          * a NULL response
          */
         if ((rv != SA_OK) || (thermal_response.bladeThermalInfoArray == NULL)) {
-                err("getBladeThermalInfo failed for blade or"
+                err("getBladeThermalInfo array failed for blade or"
                     "the blade is not in stable state");
                 return;
         }
@@ -1434,7 +1551,7 @@ SaErrorT process_server_mp_info_event(struct oh_handler_state
 
         rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
         if (rpt == NULL) {
-                if (server_insert_timer[bay_number - 1]) {
+                if (oa_handler->server_insert_timer[bay_number - 1]) {
                         return SA_OK;
                 }
                 err("Server RPT at bay %d is NULL",bay_number);

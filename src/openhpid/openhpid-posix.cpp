@@ -42,6 +42,7 @@
 #include "event.h"
 #include "init.h"
 #include "server.h"
+#include "threaded.h"
 
 
 /*--------------------------------------------------------------------*/
@@ -95,7 +96,7 @@ static GOptionEntry daemon_options[] =
 #endif
   { "ipv6",      '6', 0, G_OPTION_ARG_NONE,   &enableIPv6,      "The daemon will try to bind IPv6 socket.",          NULL },
   { "ipv4",      '4', 0, G_OPTION_ARG_NONE,   &enableIPv4,      "The daemon will try to bind IPv4 socket (default).\n"
-                                    "                            IPv6 option takes precedence over IPv6 option.",    NULL },
+                                    "                            IPv6 option takes precedence over IPv4 option.",    NULL },
 
   { NULL }
 };
@@ -145,7 +146,7 @@ void display_help(void)
 #endif
     printf("  -6, --ipv6                The daemon will try to bind IPv6 socket.\n");
     printf("  -4, --ipv4                The daemon will try to bind IPv4 socket (default).\n");
-    printf("                            IPv6 option takes precedence over IPv6 option.\n\n");
+    printf("                            IPv6 option takes precedence over IPv4 option.\n\n");
 }
 
 /*--------------------------------------------------------------------*/
@@ -294,7 +295,14 @@ static bool daemonize(const char *pidfile)
     update_pidfile(pidfile);
 
     //chdir("/");
-    umask(0); // Reset default file permissions
+
+#ifndef _WIN32
+    mode_t prev_umask = umask(022); // Reset default file permissions
+    if ( prev_umask != 022 ) {
+        WARN("Using umask 0%o instead of 022(default)",prev_umask);
+        umask(prev_umask);
+    }
+#endif
 
     // Close unneeded inherited file descriptors
     // Keep stdout and stderr open if they already are.
@@ -314,6 +322,7 @@ static void sig_handler( int signum )
     // Handles SIGTERM and SIGINT
     oh_post_quit_event();
     oh_server_request_stop();
+    oh_signal_service();
 }
 
 

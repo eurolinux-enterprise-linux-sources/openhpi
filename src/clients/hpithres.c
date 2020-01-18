@@ -29,7 +29,7 @@
 
 #include "oh_clients.h"
 
-#define OH_SVN_REV "$Revision: 7291 $"
+#define OH_SVN_REV "$Revision: 7659 $"
 
 #define READ_BUF_SIZE	1024
 
@@ -602,6 +602,9 @@ static int parse_command(char *Str)
 	int		len;
 	char		*S, *S1;
 	Com_enum_t	com;
+
+	// EOF
+	if (!Str) return(-1);
 
 	S = Str;
 	while (*S != 0) {

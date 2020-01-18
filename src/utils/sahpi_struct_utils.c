@@ -357,6 +357,10 @@ SaErrorT oh_decode_manufacturerid(SaHpiManufacturerIdT value, SaHpiTextBufferT *
                 err = oh_append_textbuffer(&working, "Cisco Systems, Inc.");
                 if (err) { return(err); }
                 break;
+        case 47196:
+                err = oh_append_textbuffer(&working, "Hewlett Packard Enterprise");
+                if (err) { return(err); }
+                break;
         default:
                 err = oh_append_textbuffer(&working,  "Unknown");
                 if (err) { return(err); }
@@ -1091,14 +1095,13 @@ static SaErrorT oh_build_resourceinfo(oh_big_textbuffer *buffer, const SaHpiReso
                 oh_append_bigtext(&working, str);
                 found++;
         }
-        if (ResourceInfo->FirmwareMajorRev) {
+        if (ResourceInfo->FirmwareMajorRev || ResourceInfo->FirmwareMinorRev) {
                 oh_append_offset(&working, offsets);
                 snprintf(str, SAHPI_MAX_TEXT_BUFFER_LENGTH, "Firmware Major Revision: %d\n",
                          ResourceInfo->FirmwareMajorRev);
                 oh_append_bigtext(&working, str);
                 found++;
-        }
-        if (ResourceInfo->FirmwareMinorRev) {
+
                 oh_append_offset(&working, offsets);
                 snprintf(str, SAHPI_MAX_TEXT_BUFFER_LENGTH, "Firmware Minor Revision: %d\n",
                          ResourceInfo->FirmwareMinorRev);

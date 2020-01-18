@@ -108,6 +108,7 @@
 	} \
 }
 
+
 /* Maximum number of enum values for healthStatus field in extraData structure
  */
 #define OA_SOAP_MAX_HEALTH_ENUM 8
@@ -194,7 +195,7 @@ enum oa_soap_diag_ex {
 /* Maximum number of possible sensor strings provided 
  * by getBladeThermalInfoArray soap call 
  */
-#define OA_SOAP_MAX_THRM_SEN	12
+#define OA_SOAP_MAX_THRM_SEN	13
 
 /* Enum values for the sensor description strings provide by 
  * getBladeThermalInfoArray soap call
@@ -211,13 +212,14 @@ enum oa_soap_thermal_sen {
 	AMBIENT_ZONE,
 	STORAGE_ZONE,
 	IO_BOARD_ZONE,
-	POWER_SUPPLY_ZONE
+	POWER_SUPPLY_ZONE,
+	CHASSIS_ZONE
 };
 
 /* Define the sensor number range for blade extra thermal sensors */
 
 #define OA_SOAP_BLD_THRM_SEN_START	0x02e
-#define OA_SOAP_BLD_THRM_SEN_END	0x069
+#define OA_SOAP_BLD_THRM_SEN_END	0x06b
 
 /* Structure required for building thermal sensor when server blade is off */
 struct oa_soap_static_thermal_sensor_info {
@@ -359,6 +361,12 @@ SaErrorT oa_soap_proc_sen_evt(struct oh_handler_state *oh_handler,
 			      SaHpiInt32T sensor_value,
 			      SaHpiFloat64T trigger_reading,
 			      SaHpiFloat64T trigger_threshold);
+
+SaErrorT oa_soap_proc_mem_evt(struct oh_handler_state *oh_handler,
+			      SaHpiResourceIdT resource_id,
+			      SaHpiSensorNumT sen_num,
+			      char *trigger_reading,
+			      SaHpiSeverityT severity);
 
 SaErrorT oa_soap_map_thresh_resp(SaHpiRdrT *rdr,
 				 void *response,

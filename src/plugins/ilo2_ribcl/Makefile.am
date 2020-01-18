@@ -37,7 +37,7 @@ MAINTAINERCLEANFILES 	= Makefile.in
 
 AM_CPPFLAGS = -DG_LOG_DOMAIN=\"ilo2_ribcl\"
 
-INCLUDES		= @OPENHPI_INCLUDES@ @XML2_INCLUDE@ @OH_SSL_INCLUDES@
+AM_CPPFLAGS		+= @OPENHPI_INCLUDES@ @XML2_INCLUDE@ @OH_SSL_INCLUDES@
 
 pkglib_LTLIBRARIES	= libilo2_ribcl.la
 
@@ -62,7 +62,9 @@ libilo2_ribcl_la_SOURCES  =	\
 				ilo2_ribcl_ssl.h \
 				ilo2_ribcl_xml.c \
 				ilo2_ribcl_xml.h \
-				ilo2_ribcl_cmnds.h
+				ilo2_ribcl_cmnds.h \
+				ilo2_ribcl_hotswap.c \
+				ilo2_ribcl_hotswap.h
 
 libilo2_ribcl_la_LIBADD   = @SSL_LIB@ @XML2_LIB@ $(top_builddir)/utils/libopenhpiutils.la
 libilo2_ribcl_la_LDFLAGS  = -module -version-info @HPI_LIB_VERSION@

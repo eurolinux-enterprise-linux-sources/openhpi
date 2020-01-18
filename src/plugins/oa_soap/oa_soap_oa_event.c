@@ -57,6 +57,7 @@
  */
 
 #include "oa_soap_oa_event.h"
+#include "sahpi_wrappers.h"
 
 /**
  * process_oa_extraction_event
@@ -165,7 +166,6 @@ SaErrorT process_oa_failover_event(struct oh_handler_state *oh_handler,
         GTimer *timer = NULL;
         gulong micro_seconds;
         gdouble time_elapsed = 0;
-        int is_switchover = SAHPI_TRUE;
 	 char oa_fw_buf[SAHPI_MAX_TEXT_BUFFER_LENGTH];
 
         if (oh_handler == NULL || oa == NULL) {
@@ -191,26 +191,26 @@ SaErrorT process_oa_failover_event(struct oh_handler_state *oh_handler,
         /* Always lock the oa_handler mutex and then oa_info mutex
          * This is to avoid the deadlock
          */
-        g_mutex_lock(oa_handler->mutex);
-        g_mutex_lock(oa->mutex);
+        wrap_g_mutex_lock(oa_handler->mutex);
+        wrap_g_mutex_lock(oa->mutex);
 
         /* Point the active_con to the current active OA's hpi_con */
         oa_handler->active_con = oa->hpi_con;
         /* This OA has become ACTIVE from STANDBY */
         oa->oa_status = ACTIVE;
-        g_mutex_unlock(oa->mutex);
+        wrap_g_mutex_unlock(oa->mutex);
 
         /* Set the other OA status as STANDBY. If the other OA is extracted,
          * then the other OA status will be set to ABSENT during re-discovery.
          */
         if (oa_handler->oa_1 == oa) {
-                g_mutex_lock(oa_handler->oa_2->mutex);
+                wrap_g_mutex_lock(oa_handler->oa_2->mutex);
                 oa_handler->oa_2->oa_status = STANDBY;
-                g_mutex_unlock(oa_handler->oa_2->mutex);
+                wrap_g_mutex_unlock(oa_handler->oa_2->mutex);
         } else {
-                g_mutex_lock(oa_handler->oa_1->mutex);
+                wrap_g_mutex_lock(oa_handler->oa_1->mutex);
                 oa_handler->oa_1->oa_status = STANDBY;
-                g_mutex_unlock(oa_handler->oa_1->mutex);
+                wrap_g_mutex_unlock(oa_handler->oa_1->mutex);
         }
 
         request.pid = oa->event_pid;
@@ -230,14 +230,14 @@ SaErrorT process_oa_failover_event(struct oh_handler_state *oh_handler,
 
 		OA_SOAP_CHEK_SHUTDOWN_REQ(oa_handler, oa_handler->mutex, NULL,
 					  timer);
-                g_mutex_lock(oa->mutex);
+                wrap_g_mutex_lock(oa->mutex);
                 rv = soap_getAllEventsEx(oa->event_con, &request, &response);
-                g_mutex_unlock(oa->mutex);
+                wrap_g_mutex_unlock(oa->mutex);
                 if (rv != SOAP_OK) {
                         err("Get all events failed during OA switchover"
                              "processing for OA %s", oa->server);
                         /* Unlock the oa_handler mutex*/
-                        g_mutex_unlock(oa_handler->mutex);
+                        wrap_g_mutex_unlock(oa_handler->mutex);
                         /* Cleanup the timer */
                         g_timer_destroy(timer);
 
@@ -279,7 +279,7 @@ SaErrorT process_oa_failover_event(struct oh_handler_state *oh_handler,
         }
 
         /* Unlock the oa_handler mutex */
-        g_mutex_unlock(oa_handler->mutex);
+        wrap_g_mutex_unlock(oa_handler->mutex);
 
         /* Get the time (in seconds) since the timer has been started */
         time_elapsed = g_timer_elapsed(timer, &micro_seconds);
@@ -289,7 +289,7 @@ SaErrorT process_oa_failover_event(struct oh_handler_state *oh_handler,
         sleep_time = OA_STABILIZE_MAX_TIME - time_elapsed;
         dbg("Sleeping for %d seconds", sleep_time);
         if (sleep_time > 0) {
-               sleep(sleep_time);
+               oa_soap_sleep_in_loop(oa_handler, sleep_time);
         }
 	OA_SOAP_CHEK_SHUTDOWN_REQ(oa_handler, NULL, NULL, NULL);
 
@@ -309,17 +309,17 @@ SaErrorT process_oa_failover_event(struct oh_handler_state *oh_handler,
          * happened while waiting for OA stabilization)
          * Return without doing re-discovery
          */
-        g_mutex_lock(oa->mutex);
+        wrap_g_mutex_lock(oa->mutex);
         if (oa->oa_status != ACTIVE) {
-                g_mutex_unlock(oa->mutex);
+                wrap_g_mutex_unlock(oa->mutex);
                 oa_handler->oa_switching=SAHPI_FALSE;
                 err("OA status already changed. OA switching completed");
                 return SA_OK;
         }
-        g_mutex_unlock(oa->mutex);
+        wrap_g_mutex_unlock(oa->mutex);
 
-        g_mutex_lock(oa_handler->mutex);
-        g_mutex_lock(oa->mutex);
+        wrap_g_mutex_lock(oa_handler->mutex);
+        wrap_g_mutex_lock(oa->mutex);
         /* Call getAllEvents to flush the OA event queue
          * Any resource state change will be handled as part of the re-discovery
          */
@@ -330,9 +330,9 @@ SaErrorT process_oa_failover_event(struct oh_handler_state *oh_handler,
          */
 	OA_SOAP_CHEK_SHUTDOWN_REQ(oa_handler, oa_handler->mutex, oa->mutex,
 				  NULL);
-        rv = oa_soap_re_discover_resources(oh_handler, oa, is_switchover);
-        g_mutex_unlock(oa->mutex);
-        g_mutex_unlock(oa_handler->mutex);
+        rv = oa_soap_re_discover_resources(oh_handler, oa);
+        wrap_g_mutex_unlock(oa->mutex);
+        wrap_g_mutex_unlock(oa_handler->mutex);
 
         /* At this point assume that switchover is complete */
         oa_handler->oa_switching=SAHPI_FALSE;
@@ -380,7 +380,7 @@ SaErrorT process_oa_reboot_event(struct oh_handler_state *oh_handler,
 	sleep_time = OA_STABILIZE_MAX_TIME;
 	dbg("Sleeping for %d seconds", sleep_time);
 	if (sleep_time > 0) {
-		sleep(sleep_time);
+               oa_soap_sleep_in_loop(oh_handler->data, sleep_time);
 	}
     /* Call the oa_soap error handling function to re establish the connection
      * with OA and rediscover all the resources
@@ -567,6 +567,7 @@ void oa_soap_proc_oa_network_info(struct oh_handler_state *oh_handler,
         struct oa_soap_handler *oa_handler = NULL;
 	SaHpiResourceIdT resource_id;
         struct extraDataInfo extra_data_info;
+        struct oa_info *temp = NULL;
         xmlNode *extra_data = NULL;
 
         if (oh_handler == NULL || nw_info == NULL) {
@@ -576,6 +577,15 @@ void oa_soap_proc_oa_network_info(struct oh_handler_state *oh_handler,
 
         oa_handler = (struct oa_soap_handler *) oh_handler->data;
         bay_number = nw_info->bayNumber;
+
+        switch (bay_number) {
+                case 1:
+                        temp = oa_handler->oa_1;
+                        break;
+                case 2:
+                        temp = oa_handler->oa_2;
+                        break;
+        }
 	resource_id =
 		oa_handler->oa_soap_resources.oa.resource_id[bay_number - 1];
         extra_data = nw_info->extraData;
@@ -594,7 +604,13 @@ void oa_soap_proc_oa_network_info(struct oh_handler_state *oh_handler,
                           break;
                 }
                 extra_data = soap_next_node(extra_data);
-        }        
+        }
+        /* Copy the server IP address to oa_info structure */
+	wrap_g_mutex_lock(temp->mutex);
+        memset(temp->server, 0, MAX_URL_LEN);
+        strncpy(temp->server, nw_info->ipAddress,
+                        strlen(nw_info->ipAddress));
+	wrap_g_mutex_unlock(temp->mutex);
 
 	/* Process the OA link status sensor */
 	OA_SOAP_PROCESS_SENSOR_EVENT(OA_SOAP_SEN_OA_LINK_STATUS,

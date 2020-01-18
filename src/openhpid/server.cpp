@@ -32,6 +32,7 @@
 #include <oh_error.h>
 #include <oh_rpc_params.h>
 #include <strmsock.h>
+#include <sahpi_wrappers.h>
 
 
 /*--------------------------------------------------------------------*/
@@ -49,38 +50,40 @@ static SaErrorT process_msg(cHpiMarshal * hm,
 /*--------------------------------------------------------------------*/
 /* Local Definitions                                                  */
 /*--------------------------------------------------------------------*/
-
+#if GLIB_CHECK_VERSION (2, 32, 0)
+static GRecMutex lock;
+#else
 static GStaticRecMutex lock = G_STATIC_REC_MUTEX_INIT;
+#endif
 static volatile bool stop = false;
 
 static GList * sockets = 0; 
-
 
 /*--------------------------------------------------------------------*/
 /* Socket List                                                        */
 /*--------------------------------------------------------------------*/
 static void add_socket_to_list( cStreamSock * sock )
 {
-    g_static_rec_mutex_lock(&lock);
+    wrap_g_static_rec_mutex_lock(&lock);
     sockets = g_list_prepend( sockets, sock );
-    g_static_rec_mutex_unlock(&lock);
+    wrap_g_static_rec_mutex_unlock(&lock);
 }
 
 static void remove_socket_from_list( const cStreamSock * sock )
 {
-    g_static_rec_mutex_lock(&lock);
+    wrap_g_static_rec_mutex_lock(&lock);
     sockets = g_list_remove( sockets, sock );
-    g_static_rec_mutex_unlock(&lock);
+    wrap_g_static_rec_mutex_unlock(&lock);
 }
 
 static void close_sockets_in_list( void )
 {
-    g_static_rec_mutex_lock(&lock);
+    wrap_g_static_rec_mutex_lock(&lock);
     for ( GList * iter = sockets; iter != 0; iter = g_list_next( iter ) ) {
         cStreamSock * sock = reinterpret_cast<cStreamSock *>(iter->data);
         sock->Close();
     }
-    g_static_rec_mutex_unlock(&lock);
+    wrap_g_static_rec_mutex_unlock(&lock);
 }
 
 
@@ -158,16 +161,34 @@ bool oh_server_run( int ipvflags,
     GThreadPool *pool;
     pool = g_thread_pool_new(service_thread, 0, max_threads, FALSE, 0);
 
+    cStreamSock::eWaitCc wc;
     // wait for a connection and then service the connection
     while (!stop) {
+        if ( ( wc = ssock->Wait() ) == cStreamSock::eWaitError ) {
+            if (stop) {
+                break;
+            }
+            g_usleep( 1000000 ); // in case the problem is persistent
+            CRIT( "Waiting on server socket failed" );
+            continue;
+        }
+
+        if ( wc == cStreamSock::eWaitTimeout ) {
+            continue;
+        }
+
         cStreamSock * sock = ssock->Accept();
+
+        if (!sock) {
+            CRIT("Error accepting server socket.");
+            g_usleep( 1000000 ); // in case the problem is persistent
+            continue;
+        }
+
         if (stop) {
             break;
         }
-        if (!sock) {
-            CRIT("Error accepting server socket.");
-            break;
-        }
+
         LogIp( sock );
         add_socket_to_list( sock );
         DBG("### Spawning thread to handle connection. ###");
@@ -224,7 +245,10 @@ static void service_thread(gpointer sock_ptr, gpointer /* user_data */)
             break;
         }
         if (!rc) {
-            CRIT("%p Error or Timeout while reading socket.", thrdid);
+            // The following error message need not be there as the
+            // ReadMsg captures the error when it returns false and
+            // one of the false return is not a real error
+            // CRIT("%p Error or Timeout while reading socket.", thrdid);
             break;
         } else if (type != eMhMsg) {
             CRIT("%p Unsupported message type. Discarding.", thrdid);
@@ -340,6 +364,7 @@ static SaErrorT process_msg(cHpiMarshal * hm,
             RpcParams iparams(&did);
             DEMARSHAL_RQ(rq_byte_order, hm, data, iparams);
 
+            DBG("OpenHPID calling the saHpiSessionOpen");
             rv = saHpiSessionOpen(OH_DEFAULT_DOMAIN_ID, &sid, security);
             if (rv == SA_OK) {
                 changed_sid = sid;

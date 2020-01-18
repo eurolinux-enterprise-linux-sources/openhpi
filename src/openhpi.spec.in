@@ -6,12 +6,17 @@
 %define _sourcedir %{_topdir}
 %define _specdir %{_topdir}
 %define _srcrpmdir %{_rpmtopdir}/SRPMS
-%define _docdir %{_datadir}/doc/%{name}-%{version}
+%define _docdir %{_datadir}/doc/%{name}
 
-# For systems where libuuid is provided in e2fsprogs rpm 
+%if %{undefined suse_version}
+# For systems where libuuid is provided in e2fsprogs rpm
 %define uuid_provider e2fsprogs
-# For systems where libuuid is provided in libuuid rpm 
-#%define uuid_provider libuuid
+%define uuid libuuid
+%endif
+%if %{defined suse_version}
+# For systems where libuuid is provided in libuuid rpm
+%define uuid_provider libuuid
+%endif
 
 %define with_openssl @WITH_OPENSSL@
 
@@ -40,6 +45,7 @@
 
 %define with_ilo2_ribcl @WITH_ILO2_RIBCL@
 %define with_oa_soap @WITH_OA_SOAP@
+%define with_ov_rest @WITH_OV_REST@
 
 %if "x@SLAVE@" == "xslave"
 %define with_slave 1
@@ -76,12 +82,31 @@ BuildRequires: openssl-devel
 %if 0%{?with_gcrypt}
 BuildRequires: libgcrypt-devel
 %endif
-Requires: glib2 libstdc++
+#Requires: glib2 libstdc++
 %if 0%{?with_openssl}
 Requires: openssl
 %endif
 %if 0%{?with_gcrypt}
+%if 0%{?suse_version}
+Requires: libgcrypt20
+%else
 Requires: libgcrypt
+%endif
+%endif
+%if %{undefined suse_version}
+Requires: glib2 libstdc++
+%endif
+%if 0%{?suse_version} <= 1100
+Requires:  glib2 libstdc++
+%define uuid libuuid
+%endif
+%if 0%{?suse_version} >= 1100 && 0%{?suse_version} <= 1140
+Requires:  glib2 libstdc++43
+%define uuid libuuid1
+%endif
+%if 0%{?suse_version} >= 1200
+Requires:  glib2 libstdc++6
+%define uuid libuuid1
 %endif
 
 %package devel
@@ -139,7 +164,7 @@ Requires: openhpi = %{version}
 Summary: OpenHPI plugin for the IBM Blade Center
 Group: System/Monitoring
 BuildRequires: net-snmp-devel %{uuid_provider}-devel
-Requires: openhpi = %{version} net-snmp > 5.0 %{uuid_provider}
+Requires: openhpi = %{version} net-snmp > 5.0 %{uuid}
 %endif
 
 %if 0%{?with_sysfs}
@@ -170,6 +195,22 @@ Summary: OpenHPI plugin for HP BladeSystem c-Class
 Group: System/Monitoring
 BuildRequires: libxml2-devel
 Requires: openhpi = %{version} libxml2 openssl
+%endif
+
+%if 0%{?with_ov_rest}
+%package ov_rest
+Summary: OpenHPI plugin for HP One View
+Group: System/Monitoring
+%if 0%{?suse_version}
+BuildRequires: libcurl-devel libjson-c-devel
+%else
+BuildRequires: libcurl-devel json-c-devel librabbitmq-devel
+%endif
+%if 0%{?suse_version}
+Requires: openhpi = %{version} libjson-c2 libcurl-devel 
+%else
+Requires: openhpi = %{version} json-c libcurl-devel librabbitmq-devel
+%endif
 %endif
 
 %if 0%{?with_slave}
@@ -264,6 +305,12 @@ to the OA of a c-Class chassis using an SSL connection and manages the system
 using an XML-encoded SOAP interface.
 %endif
 
+%if 0%{?with_ov_rest}
+%description ov_rest
+OpenHPI plug-in supporting HP One View. This plug-in connects
+to OneView using curl and processing the output using json-c
+%endif
+
 %if 0%{?with_slave}
 %description slave
 OpenHPI plug-in that allows to aggregate resources from different domains 
@@ -285,7 +332,7 @@ OpenHPI plugin that reports fakes hardware and allows runtime configuration chan
 %build
 ###################################################
 %configure @ac_configure_args@ --prefix=/usr --with-varpath=/var/lib/%{name}
-find . -type f -name "Makefile" | xargs -n1 sed -i -e 's/-D_FORTIFY_SOURCE=2//g;'
+find . -type f -name "Makefile" | xargs -n1 sed -i -e 's/ -Wp,-D_FORTIFY_SOURCE=2//g;'
 %{__make}
 
 ###################################################
@@ -303,6 +350,7 @@ make DESTDIR=%{buildroot} install
 %defattr(-,root,root)
 %{_docdir}/README*
 %{_docdir}/COPYING
+%{_docdir}/ChangeLog
 %dir %{_sysconfdir}/%{name}/
 %config(noreplace) %attr(0600,root,root) %{_sysconfdir}/%{name}/%{name}.conf
 %config(noreplace) %attr(0600,root,root) %{_sysconfdir}/%{name}/simulation.data
@@ -414,6 +462,14 @@ make DESTDIR=%{buildroot} install
 ###################################################
 %defattr(-,root,root)
 %{_libdir}/%{name}/liboa_soap.*
+%endif
+
+###################################################
+%if 0%{?with_ov_rest}
+%files ov_rest
+###################################################
+%defattr(-,root,root)
+%{_libdir}/%{name}/libov_rest.*
 %endif
 
 ###################################################

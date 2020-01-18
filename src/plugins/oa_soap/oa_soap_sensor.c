@@ -99,6 +99,7 @@
 
 #include "oa_soap_sensor.h"
 #include "oa_soap_resources.h"
+#include "sahpi_wrappers.h"
 
 /* Forward declarations of static functions */
 static SaErrorT oa_soap_gen_sen_evt(struct oh_handler_state *oh_handler,
@@ -192,16 +193,19 @@ SaErrorT oa_soap_get_sensor_reading(void *oh_handler,
         sensor_info = (struct oa_soap_sensor_info*)
                 oh_get_rdr_data(handler->rptcache, resource_id, rdr->RecordId);
         if (sensor_info == NULL) {
-                err("No data for Sensor %s in Resource %d",
-                       rdr->IdString.Data, resource_id);
+                err("No data for Sensor '%s' in Resource '%s' at location %d",
+                       rdr->IdString.Data, rpt->ResourceTag.Data,
+                       rpt->ResourceEntity.Entry[0].EntityLocation);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
         /* Check whether sensor is enabled */
         if (sensor_info->sensor_enable == SAHPI_FALSE) {
-                err("Sensor %s not enabled for resource %d", 
-                       rdr->IdString.Data, resource_id);
-                return(SA_ERR_HPI_INVALID_REQUEST);
+                warn("Sensor '%s' is not enabled for resource '%s'" 
+                     " at location %d",
+                       rdr->IdString.Data, rpt->ResourceTag.Data,
+                       rpt->ResourceEntity.Entry[0].EntityLocation);
+                return(SA_ERR_HPI_NOT_PRESENT);
         }
 
 	/* Check whether the reading is supported or not */
@@ -209,8 +213,9 @@ SaErrorT oa_soap_get_sensor_reading(void *oh_handler,
 	    SAHPI_FALSE) {
 		data->IsSupported = SAHPI_FALSE;
 		*state = sensor_info->current_state;
-		dbg("Reading Sensor %s in resource %d is not supported",
-                       rdr->IdString.Data, resource_id);
+                dbg("Reading Sensor '%s' in resource '%s' at location %d is" 
+                    " not supported", rdr->IdString.Data, rpt->ResourceTag.Data,
+                       rpt->ResourceEntity.Entry[0].EntityLocation);
 		return SA_OK;
 	}
 
@@ -1228,7 +1233,7 @@ SaErrorT update_sensor_rdr(struct oh_handler_state *oh_handler,
                                                      &power_supply_request,
                                                      power_supply_response);
                         if (rv != SOAP_OK) { 
-                                g_free(power_supply_response);
+                                wrap_g_free(power_supply_response);
                                 return SA_ERR_HPI_INTERNAL_ERROR;
                         }
                         sensor_data->data.IsSupported = SAHPI_TRUE;
@@ -1236,8 +1241,7 @@ SaErrorT update_sensor_rdr(struct oh_handler_state *oh_handler,
                                 SAHPI_SENSOR_READING_TYPE_FLOAT64;
                         sensor_data->data.Value.SensorFloat64 =
                                 power_supply_response->actualOutput;
-                        g_free(power_supply_response);
-                        power_supply_response = NULL;
+                        wrap_g_free(power_supply_response);
                         break;
                 default:
                         err("Wrong resource type");
@@ -2157,6 +2161,101 @@ SaErrorT oa_soap_proc_sen_evt(struct oh_handler_state *oh_handler,
 }
  
 /**
+ * oa_soap_proc_mem_evt
+ *      @oh_handler: Pointer to openhpi handler
+ *      @resource_id: Resource Id
+ *      @sensor_num: Sensor number
+ *      @trigger_reading: mainMemoryErros sensor reading
+ *      @severity: Event severity 
+ *
+ * Purpose:
+ *	Processes and raises the memory event
+ *
+ * Detailed Description:
+ *	- Raises the memory event when there is/are DIMM failure/s
+ *
+ * Return values:
+ *      SA_OK  - on success.
+ *      SA_ERR_HPI_INVALID_PARAMS - on wrong parameters
+ *      SA_ERR_HPI_INTERNAL_ERROR - oa_soap plugin has encountered an internal
+ *                                  error.
+ **/
+SaErrorT oa_soap_proc_mem_evt(struct oh_handler_state *oh_handler,
+			      SaHpiResourceIdT resource_id,
+			      SaHpiSensorNumT sensor_num,
+			      char *trigger_reading,
+			      SaHpiSeverityT severity)
+{
+        SaHpiRptEntryT *rpt = NULL;
+        struct oh_event event;
+        int len = 0;
+
+        if (oh_handler == NULL) {
+                err("wrong parameters passed");
+                return SA_ERR_HPI_INVALID_PARAMS;
+        }
+
+        /* Get the rpt entry of the resource */
+        rpt = oh_get_resource_by_id(oh_handler->rptcache, resource_id);
+        if (rpt == NULL) {
+                err("resource RPT is NULL");
+                return SA_ERR_HPI_INTERNAL_ERROR;
+        }
+
+        /* Update the event structure */
+        memset(&event, 0, sizeof(struct oh_event));
+        event.event.EventType = SAHPI_ET_SENSOR;
+        memcpy(&(event.resource), rpt, sizeof(SaHpiRptEntryT));
+        event.event.Source = event.resource.ResourceId;
+        event.hid = oh_handler->hid;
+        event.event.EventDataUnion.SensorEvent.SensorNum =
+                                          OA_SOAP_SEN_MAIN_MEMORY_ERRORS;
+        event.event.EventDataUnion.SensorEvent.SensorType = SAHPI_MEMORY;
+        event.event.EventDataUnion.SensorEvent.EventCategory = 
+                                                      SAHPI_EC_PRED_FAIL;
+        event.event.EventDataUnion.SensorEvent.OptionalDataPresent = 
+                                               SAHPI_SOD_TRIGGER_READING;
+        event.event.EventDataUnion.SensorEvent.TriggerReading.Type =
+                                        SAHPI_SENSOR_READING_TYPE_BUFFER;
+        event.event.EventDataUnion.SensorEvent.TriggerReading.IsSupported = 
+                                                              SAHPI_TRUE;
+        oh_gettimeofday(&(event.event.Timestamp));
+      
+        switch (severity) {
+                case SAHPI_CRITICAL:
+                        event.event.EventDataUnion.SensorEvent.Assertion =
+                                                              SAHPI_TRUE;
+                        event.event.EventDataUnion.SensorEvent.EventState =
+                                            SAHPI_ES_PRED_FAILURE_ASSERT;
+                        event.event.Severity = SAHPI_CRITICAL;
+                        break;
+
+                case SAHPI_OK:
+                        event.event.EventDataUnion.SensorEvent.Assertion =
+                                                             SAHPI_FALSE;
+                        event.event.EventDataUnion.SensorEvent.EventState =
+                                          SAHPI_ES_PRED_FAILURE_DEASSERT;
+                        event.event.Severity = SAHPI_OK;
+                        break;
+
+                default:
+                        err("unknown severity");
+                        return SA_ERR_HPI_INTERNAL_ERROR; 
+        } 
+  
+        len = strlen(trigger_reading);
+        if (len >= SAHPI_SENSOR_BUFFER_LENGTH)
+                len = SAHPI_SENSOR_BUFFER_LENGTH - 1;
+        
+        strncpy((char *)&event.event.EventDataUnion.SensorEvent.TriggerReading.
+                             Value.SensorBuffer, trigger_reading, len);
+
+        oh_evt_queue_push(oh_handler->eventq, copy_oa_soap_event(&event));
+
+        return SA_OK;
+}
+
+/**
  * oa_soap_map_thresh_resp
  *      @rdr: Pointer to the sensor rdr
  *      @oa_soap_threshold_sensor: Structure containing the threshold reading
@@ -2457,7 +2556,7 @@ SaErrorT oa_soap_assert_sen_evt(struct oh_handler_state *oh_handler,
 				err("Unrecognized sensor class %d "
 				    "is detected", sensor_class);
 				/* Release the node->data */
-				g_free(node->data);
+				wrap_g_free(node->data);
 				continue;
 		 }
 
@@ -2472,7 +2571,7 @@ SaErrorT oa_soap_assert_sen_evt(struct oh_handler_state *oh_handler,
 			oa_soap_gen_res_evt(oh_handler, rpt,
 					    OA_SOAP_SEN_ASSERT_TRUE);
 		/* Release the node->data */
-		g_free(node->data);
+		wrap_g_free(node->data);
 	} /* End of while loop */
 
 	/* Release the assert_sensor_list */

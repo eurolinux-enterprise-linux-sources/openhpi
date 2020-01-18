@@ -5,7 +5,7 @@ dnl   various hacks by Sean Dague <http://dague.net/sean> 4/23/03
 
 
 AC_PREREQ(2.57)
-AC_INIT(openhpi, 3.4.0)
+AC_INIT(openhpi, 3.7.0)
 AC_CONFIG_SRCDIR(openhpi.spec.in)
 AM_INIT_AUTOMAKE([1.8])
 
@@ -23,7 +23,7 @@ AH_BOTTOM([#endif /* __OPENHPI_CONFIG_H */])
 # minor version: 11 = 11
 # patch version: 4  = 4
 #
-HPI_LIB_VERSION=7:0:4
+HPI_LIB_VERSION=10:0:7
 HPI_PKG=$PACKAGE_NAME
 HPI_UTIL_PKG=${PACKAGE_NAME}utils
 HPI_CLIENT_PKG=${PACKAGE_NAME}client
@@ -44,6 +44,8 @@ AC_PROG_CPP
 AC_PROG_INSTALL
 AC_PROG_LN_S
 AC_PROG_MAKE_SET
+AC_PROG_AWK
+AC_PROG_GREP
 
 enabled_non32bit="no"
 AC_ARG_ENABLE([non32bit-int],
@@ -181,6 +183,20 @@ AC_CHECK_HEADERS([libxml2/libxml/xmlexports.h],[XML2_INCLUDE="-I/usr/include/lib
 AC_SUBST(XML2_LIB)
 AC_SUBST(XML2_INCLUDE)
 
+dnl curl, json-c and rabbitmq-c are used in ov_rest plugin
+AC_CHECK_LIB([curl],[curl_global_init],[CURL_LIB=-lcurl],[CURL_LIB=])
+AC_SUBST(CURL_LIB)
+AC_CHECK_HEADERS([curl/curl.h],[have_curl=yes],[have_curl=no])
+AC_CHECK_LIB([json-c],[json_tokener_parse],[JSON_C_LIB=-ljson-c],[JSON_C_LIB=])
+AC_CHECK_HEADERS([json-c/json.h],[JSON_C_INCLUDE="-I/usr/include/json-c"],[JSON_C_INCLUDE])
+AC_SUBST(JSON_C_LIB)
+AC_SUBST(JSON_C_INCLUDE)
+AC_CHECK_LIB([rabbitmq],[amqp_new_connection],[RABBITMQ_LIB=-lrabbitmq],[RABBITMQ_LIB=])
+AC_SUBST(RABBITMQ_LIB)
+DISTRO=`grep "^ID=" /etc/os-release | awk -F"\"" '{ print $2 }'`
+
+AC_CHECK_HEADERS([amqp.h],[have_rabbitmq=yes],[have_rabbitmq=no])
+
 dnl Build daemon statically or dynamically.
 openhpid_static="no"
 
@@ -208,6 +224,12 @@ AC_ARG_ENABLE([cpp_wrappers],
     fi])
 
 AC_SUBST(ENABLED_DIRS)
+
+dnl Old autotools do not define docdir
+AC_SUBST([docdir])
+if test x$docdir = x; then
+    AC_SUBST([docdir], ${datadir}/doc/${PACKAGE_NAME})
+fi
 
 dnl Checks for header files.
 AC_HEADER_STDC
@@ -420,6 +442,41 @@ AC_ARG_ENABLE([oa_soap],
      fi
     ])
 
+# configure argument for the ov_rest plugin
+AC_ARG_ENABLE([ov_rest],
+    [  --enable-ov_rest        build ov_rest plugin [[default=no]]],
+    [if test "x$enableval" = "xyes"; then
+        if test "x$have_curl" = "xyes"; then
+            if test "x$have_rabbitmq" = "xyes"; then
+                if test -n "$JSON_C_INCLUDE"; then
+                    AC_SUBST(OV_REST,ov_rest)
+                    AC_SUBST(WITH_OV_REST,1)
+                    if test "$DISTRO" = "sles"; then
+	    	        AC_SUBST(RABBITMQ_LIB,-lrabbitmq)
+                    fi
+	        else
+	    	    OH_CHECK_FAIL(json-c-devel,,,ov_rest needs json-c headers)
+	        fi
+	    else
+	      OH_CHECK_FAIL(librabbitmq-devel,,,ov_rest needs rabbitmq headers)
+	    fi
+       else
+         OH_CHECK_FAIL(libcurl-devel,,,ov_rest needs curl headers)
+       fi
+else
+ AC_SUBST(WITH_OV_REST,0)
+fi],
+    [if test "x$have_curl" = "xyes" && test "x$have_rabbitmq" && test -n "$JSON_C_INCLUDE"; then
+        AC_SUBST(OV_REST,ov_rest)
+        AC_SUBST(WITH_OV_REST,1)
+        if test "$DISTRO" = "sles"; then
+	   AC_SUBST(RABBITMQ_LIB,-lrabbitmq)
+        fi
+     else
+        AC_SUBST(WITH_OV_REST,0)
+     fi
+    ])
+
 # configure argument for enabling file encryption
 AC_ARG_ENABLE([encryption],
     [  --enable-encryption        Enable File Encryption [[default=yes if libgcrypt and gcrypt.h exist]]],
@@ -427,7 +484,6 @@ AC_ARG_ENABLE([encryption],
         if test "x$have_gcrypt" = "xyes"; then
             if test "x$have_gcrypt_lib" = "xyes"; then 
                 AC_SUBST(HPICRYPT,hpicrypt)
-                AC_SUBST(HPICRYPT_POD,hpicrypt.1.pod)
                 AC_SUBST(HPICRYPT_MAN,hpicrypt.1)
                 CRYPT_FLAG="-DHAVE_ENCRYPT" 
                 AC_SUBST(CRYPT_FLAG)
@@ -445,7 +501,6 @@ AC_ARG_ENABLE([encryption],
     [if test "x$have_gcrypt" = "xyes"; then
         if test "x$have_gcrypt_lib" = "xyes"; then 
               AC_SUBST(HPICRYPT,hpicrypt)
-              AC_SUBST(HPICRYPT_POD,hpicrypt.1.pod)
               AC_SUBST(HPICRYPT_MAN,hpicrypt.1)
               CRYPT_FLAG="-DHAVE_ENCRYPT" 
               AC_SUBST(CRYPT_FLAG)
@@ -740,6 +795,7 @@ AC_CONFIG_FILES([openhpi.spec
         plugins/rtas/Makefile
         plugins/ilo2_ribcl/Makefile
         plugins/oa_soap/Makefile
+        plugins/ov_rest/Makefile
         plugins/slave/Makefile
         plugins/test_agent/Makefile
         scripts/Makefile

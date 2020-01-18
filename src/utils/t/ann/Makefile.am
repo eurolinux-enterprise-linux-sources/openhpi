@@ -21,13 +21,14 @@ REMOTE_SOURCES       = announcement_utils.c \
                        sahpi_time_utils.c \
                        sahpiatca_enum_utils.c \
                        sahpixtca_enum_utils.c \
+                       sahpi_wrappers.c \
                        uid_utils.c
 
 MOSTLYCLEANFILES     = $(shell ls *data) $(REMOTE_SOURCES) @TEST_CLEAN@
 
 AM_CPPFLAGS = -DG_LOG_DOMAIN=\"t\"
 
-INCLUDES             = @OPENHPI_INCLUDES@
+AM_CPPFLAGS             += @OPENHPI_INCLUDES@
 
 $(REMOTE_SOURCES):
 	if test ! -f $@ -a ! -L $@; then \

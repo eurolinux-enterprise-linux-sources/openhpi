@@ -58,6 +58,7 @@
  **/
 
 #include "oa_soap_discover.h"
+#include "sahpi_wrappers.h"
 #include "oa_soap.h"
 #include "oa_soap_utils.h"
 
@@ -118,9 +119,10 @@ SaErrorT build_oa_soap_custom_handler(struct oh_handler_state *oh_handler)
                         err("out of memory");
                         return SA_ERR_HPI_OUT_OF_MEMORY;
                 }
+                oa_handler->in_discovery_thread = HPOA_FALSE;
                 oa_handler->status = PRE_DISCOVERY;
                 oa_handler->active_con = NULL;
-                oa_handler->mutex = g_mutex_new();
+                oa_handler->mutex = wrap_g_mutex_new_init();
                 oa_handler->oa_1 = NULL;
                 oa_handler->oa_2 = NULL;
                 oa_handler->oa_switching=SAHPI_FALSE;
@@ -131,7 +133,7 @@ SaErrorT build_oa_soap_custom_handler(struct oh_handler_state *oh_handler)
                         g_malloc0(sizeof(struct oa_info));
                 if (oa_handler->oa_1 == NULL) {
                         err("Out of memory");
-                        g_free(oa_handler);
+                        wrap_g_free(oa_handler);
                         return SA_ERR_HPI_OUT_OF_MEMORY;
                 }
 
@@ -139,8 +141,8 @@ SaErrorT build_oa_soap_custom_handler(struct oh_handler_state *oh_handler)
                         g_malloc0(sizeof(struct oa_info));
                 if (oa_handler->oa_2 == NULL) {
                         err("Out of memory");
-                        g_free(oa_handler->oa_1);
-                        g_free(oa_handler);
+                        wrap_g_free(oa_handler->oa_1);
+                        wrap_g_free(oa_handler);
                         return SA_ERR_HPI_OUT_OF_MEMORY;
                 }
 
@@ -150,7 +152,7 @@ SaErrorT build_oa_soap_custom_handler(struct oh_handler_state *oh_handler)
                 oa_handler->oa_1->event_con = NULL;
                 oa_handler->oa_1->event_con2 = NULL;
                 oa_handler->oa_1->thread_handler = NULL;
-                oa_handler->oa_1->mutex = g_mutex_new();
+                oa_handler->oa_1->mutex = wrap_g_mutex_new_init();
                 memset(oa_handler->oa_1->server, 0, MAX_URL_LEN);
 		oa_handler->oa_1->oh_handler = oh_handler;
 
@@ -160,9 +162,11 @@ SaErrorT build_oa_soap_custom_handler(struct oh_handler_state *oh_handler)
                 oa_handler->oa_2->event_con = NULL;
                 oa_handler->oa_2->event_con2 = NULL;
                 oa_handler->oa_2->thread_handler = NULL;
-                oa_handler->oa_2->mutex = g_mutex_new();
-                memset(oa_handler->oa_1->server, 0, MAX_URL_LEN);
+                oa_handler->oa_2->mutex = wrap_g_mutex_new_init();
+                memset(oa_handler->oa_2->server, 0, MAX_URL_LEN);
 		oa_handler->oa_2->oh_handler = oh_handler;
+                memset(oa_handler->memErrRecFlag, 0, sizeof( SaHpiInt32T) * 16);
+                memset(oa_handler->server_insert_timer, 0, sizeof( time_t) * 16);
 
                 /* Put the oa_handler in oh_handler */
                 oh_handler->data = oa_handler;
@@ -253,7 +257,7 @@ void *oa_soap_open(GHashTable *handler_config,
         handler->eventq = eventq;
         handler->rptcache = (RPTable *) g_malloc0(sizeof(RPTable));
         if (handler->rptcache == NULL) {
-                g_free(handler);
+                wrap_g_free(handler);
                 err("Out of memory");
                 return NULL;
         }
@@ -261,8 +265,8 @@ void *oa_soap_open(GHashTable *handler_config,
         rv = oh_init_rpt(handler->rptcache);
         if (rv != SA_OK) {
                 err("Initializing rptcache failed");
-                g_free(handler->rptcache);
-                g_free(handler);
+                wrap_g_free(handler->rptcache);
+                wrap_g_free(handler);
                 return NULL;
         }
 
@@ -276,8 +280,8 @@ void *oa_soap_open(GHashTable *handler_config,
                  * Else, try to build the oa_soap_handler during discovery call
                  */
                 if (rv == SA_ERR_HPI_OUT_OF_MEMORY) {
-                        g_free(handler->rptcache);
-                        g_free(handler);
+                        wrap_g_free(handler->rptcache);
+                        wrap_g_free(handler);
                         return NULL;
                 }
         }
@@ -294,9 +298,6 @@ void *oa_soap_open(GHashTable *handler_config,
  *
  * Detailed Description:
  *      - Releases all the memory allocated by OA SOAP plugin handler
- *      - As per current framework implementation, this api won't be called
- *        during process shutdown as there is no graceful shutdown implemented
- *        as part of the openhpi framework.
  *
  * Return values:
  *      NONE
@@ -306,6 +307,7 @@ void oa_soap_close(void *oh_handler)
 {
         struct oh_handler_state *handler = NULL;
         struct oa_soap_handler *oa_handler = NULL;
+        int i=0;
 
         if (oh_handler == NULL) {
                 err("Invalid parameter");
@@ -336,9 +338,22 @@ void oa_soap_close(void *oh_handler)
 		g_thread_join(oa_handler->oa_2->thread_handler);
 	dbg("Stopped the OA SOAP event threads");
 
+        /* Now we have to make sure that discovery thread is not in oa_soap */
+        /* TODO: remove the hard coded values in this */
+        for ( i=0; i < 10; i++ ) {
+                if (oa_handler->in_discovery_thread == HPOA_FALSE) {
+                         break;
+                }
+                sleep(3);
+        }
+        if (oa_handler->in_discovery_thread == HPOA_TRUE) {
+                err("oa_soap_discovery is continuing even after 30 seconds");
+                err("Shutting down the plugin though");
+        }
+        
         /* Cleanup the RPTable */
         cleanup_plugin_rptable(handler);
-	g_free(handler->rptcache);
+	wrap_g_free(handler->rptcache);
         dbg("Cleaned the OA SOAP RPTable");
 
         /* Release the mutexes. Check whether the mutex is unlocked or not. If
@@ -346,35 +361,35 @@ void oa_soap_close(void *oh_handler)
 	 * crash
          */
 	if (oa_handler->mutex != NULL) {
-		if (g_mutex_trylock(oa_handler->mutex) == FALSE) {
+		if (wrap_g_mutex_trylock(oa_handler->mutex) == FALSE) {
 			err("Mutex in OA handler is not unlocked by the event"
 			    " thread");
 			err("Mutex in OA handler is not released");
 		} else {
-			g_mutex_unlock(oa_handler->mutex);
-			g_mutex_free(oa_handler->mutex);
+			wrap_g_mutex_unlock(oa_handler->mutex);
+			wrap_g_mutex_free_clear(oa_handler->mutex);
 		}
 	}
 
 	if (oa_handler->oa_1->mutex != NULL) {
-		if (g_mutex_trylock(oa_handler->oa_1->mutex) == FALSE) {
+		if (wrap_g_mutex_trylock(oa_handler->oa_1->mutex) == FALSE) {
 			err("Mutex in oa_1 is not unlocked by the event"
 			    " thread");
 			err("Mutex in oa_1 is not released");
 		} else {
-			g_mutex_unlock(oa_handler->oa_1->mutex);
-			g_mutex_free(oa_handler->oa_1->mutex);
+			wrap_g_mutex_unlock(oa_handler->oa_1->mutex);
+			wrap_g_mutex_free_clear(oa_handler->oa_1->mutex);
 		}
 	}
 
 	if (oa_handler->oa_2->mutex != NULL) {
-		if (g_mutex_trylock(oa_handler->oa_2->mutex) == FALSE) {
+		if (wrap_g_mutex_trylock(oa_handler->oa_2->mutex) == FALSE) {
 			err("Mutex in oa_2 is not unlocked by the event"
 			    " thread");
 			err("Mutex in oa_2 is not released");
 		} else {
-			g_mutex_unlock(oa_handler->oa_2->mutex);
-			g_mutex_free(oa_handler->oa_2->mutex);
+			wrap_g_mutex_unlock(oa_handler->oa_2->mutex);
+			wrap_g_mutex_free_clear(oa_handler->oa_2->mutex);
 		}
 	}
         dbg("Released the OA SOAP handler mutexes");
@@ -395,13 +410,13 @@ void oa_soap_close(void *oh_handler)
         dbg("Released the SOAP CON structures from handler");
 
         /* Release the oa info structure */
-        g_free(oa_handler->oa_1);
-        g_free(oa_handler->oa_2);
+        wrap_g_free(oa_handler->oa_1);
+        wrap_g_free(oa_handler->oa_2);
         dbg("Released the oa_info structures from handler");
 
         /* Release the oa handler structure */
-        g_free(oa_handler);
-        g_free(handler);
+        wrap_g_free(oa_handler);
+        wrap_g_free(handler);
         dbg("Released the OA SOAP handler");
 
         return;

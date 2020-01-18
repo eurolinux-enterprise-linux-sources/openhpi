@@ -105,9 +105,16 @@
  *      update_oa_fw_version()          - Updates the RPT entry and IDR entry
  *                                        with OA firmware version
  *
+ *      oa_soap_check_serial_number()   - Check the serial_number and
+ *                                        give a proper message
+ *
+ *      oa_soap_sleep_in_loop()   	- Sleep in 3 second intervals so that
+ *                                        thread could catch the signal and exit
+ *
  **/
 
 #include "oa_soap_utils.h"
+#include "sahpi_wrappers.h"
 
 /**
  * get_oa_soap_info
@@ -230,6 +237,11 @@ SaErrorT get_oa_state(struct oh_handler_state *oh_handler,
                 err("Invalid parameters");
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
+
+	if (!strcmp(server,"0.0.0.0")) {
+                err("Invalid OA IP 0.0.0.0");
+                return SA_ERR_HPI_INVALID_PARAMS;
+	}
 
         oa_handler = (struct oa_soap_handler *) oh_handler->data;
 
@@ -642,7 +654,7 @@ SaErrorT del_rdr_from_event(struct oh_event *event)
                 }
                 /* Pop out the RDR from the RDRs list  */
                 event->rdrs = g_slist_remove(event->rdrs, (gpointer)rdr);
-                g_free(rdr);
+                wrap_g_free(rdr);
                 /* Get the next RDR */
                 node = event->rdrs;
         } while (node != NULL);
@@ -688,11 +700,11 @@ SaErrorT check_oa_status(struct oa_soap_handler *oa_handler,
         else
                 status.bayNumber = 2;
 
-        g_mutex_lock(oa->mutex);
+        wrap_g_mutex_lock(oa->mutex);
         rv = soap_getOaStatus(con, &status, &status_response);
         if (rv != SOAP_OK) {
                 err("Get OA status call failed");
-                g_mutex_unlock(oa->mutex);
+                wrap_g_mutex_unlock(oa->mutex);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -703,11 +715,11 @@ SaErrorT check_oa_status(struct oa_soap_handler *oa_handler,
                  * Wait till it it becomes Active
                  */
                 err("OA is in transition state");
-                sleep(OA_STABILIZE_MAX_TIME);
+                oa_soap_sleep_in_loop(oa_handler, OA_STABILIZE_MAX_TIME);
                 rv = soap_getOaStatus(con, &status, &status_response);
                 if (rv != SOAP_OK) {
                         err("Get OA status call failed");
-                        g_mutex_unlock(oa->mutex);
+                        wrap_g_mutex_unlock(oa->mutex);
                         return SA_ERR_HPI_INTERNAL_ERROR;
                 }
                 /* Check OA is still in TRANSITION state
@@ -716,33 +728,34 @@ SaErrorT check_oa_status(struct oa_soap_handler *oa_handler,
                 if (status_response.oaRole == TRANSITION) {
                         err("OA is in TRANSITION for a long time");
                         err("Please correct the OA");
-                        g_mutex_unlock(oa->mutex);
+                        wrap_g_mutex_unlock(oa->mutex);
                         return SA_ERR_HPI_INTERNAL_ERROR;
                  }
         }
 
-       /* If Enclosure IP mode is enabled then ipswap becomes true, then Active OA IP is always same. So do not change the Role */
+       /* If Enclosure IP mode is enabled then ipswap becomes true, 
+          then Active OA IP is always same. So do not change the Role */
 
         if(!oa_handler->ipswap) {
                 oa->oa_status = status_response.oaRole;
         }
 
         if (oa->oa_status == ACTIVE) {
-                g_mutex_unlock(oa->mutex);
+                wrap_g_mutex_unlock(oa->mutex);
                 /* Always lock the oa_handler mutex and then oa_info mutex
                  * This is to avoid the deadlock
                  */
-                g_mutex_lock(oa_handler->mutex);
-                g_mutex_lock(oa->mutex);
+                wrap_g_mutex_lock(oa_handler->mutex);
+                wrap_g_mutex_lock(oa->mutex);
                 /* Point the active_con to Active OA's hpi_con */
                 if (oa_handler->active_con != oa->hpi_con) {
                         oa_handler->active_con = oa->hpi_con;
                         err("OA %s has become Active", oa->server);
                 }
-                g_mutex_unlock(oa->mutex);
-                g_mutex_unlock(oa_handler->mutex);
+                wrap_g_mutex_unlock(oa->mutex);
+                wrap_g_mutex_unlock(oa_handler->mutex);
         } else
-                g_mutex_unlock(oa->mutex);
+                wrap_g_mutex_unlock(oa->mutex);
 
         return SA_OK;
 }
@@ -950,7 +963,7 @@ SaErrorT lock_oa_soap_handler(struct oa_soap_handler *oa_handler)
         }
 
         /* Try to lock the oa_handler mutex */
-        lock_state = g_mutex_trylock(oa_handler->mutex);
+        lock_state = wrap_g_mutex_trylock(oa_handler->mutex);
         if (lock_state == FALSE) {
                 err("OA SOAP Handler is locked.");
                 err("No operation is allowed in this state");
@@ -959,7 +972,7 @@ SaErrorT lock_oa_soap_handler(struct oa_soap_handler *oa_handler)
         }
 
         /* Unlock the oa_handler mutex */
-        g_mutex_unlock(oa_handler->mutex);
+        wrap_g_mutex_unlock(oa_handler->mutex);
         return SA_OK;
 }
 
@@ -1044,15 +1057,15 @@ SaErrorT create_event_session(struct oa_info *oa)
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
 
-        g_mutex_lock(oa->mutex);
+        wrap_g_mutex_lock(oa->mutex);
         if (oa->event_con == NULL) {
                 dbg("OA may not be accessible");
-                g_mutex_unlock(oa->mutex);
+                wrap_g_mutex_unlock(oa->mutex);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
         rv = soap_subscribeForEvents(oa->event_con, &pid);
-        g_mutex_unlock(oa->mutex);
+        wrap_g_mutex_unlock(oa->mutex);
         if (rv != SOAP_OK) {
                 err("Subscribe for events failed");
                 return SA_ERR_HPI_INTERNAL_ERROR;
@@ -1101,20 +1114,20 @@ void create_oa_connection(struct oa_soap_handler *oa_handler,
                  is_oa_present = SAHPI_FALSE;
                  while (is_oa_present == SAHPI_FALSE) {
                 	OA_SOAP_CHEK_SHUTDOWN_REQ(oa_handler, NULL, NULL, NULL);
-                        g_mutex_lock(oa->mutex);
+                        wrap_g_mutex_lock(oa->mutex);
                         if (oa->oa_status != OA_ABSENT) {
-                                g_mutex_unlock(oa->mutex);
+                                wrap_g_mutex_unlock(oa->mutex);
                                 is_oa_present = SAHPI_TRUE;
                         } else {
-                                g_mutex_unlock(oa->mutex);
+                                wrap_g_mutex_unlock(oa->mutex);
                                 /* OA is not present,
                                  * wait for 30 seconds and check again
                                  */
-                                sleep(30);
+                                oa_soap_sleep_in_loop(oa_handler, 30);
                         }
                 }
 
-                g_mutex_lock(oa->mutex);
+                wrap_g_mutex_lock(oa->mutex);
                 /* Close the soap_con strctures */
                 if (oa->hpi_con != NULL) {
                         soap_close(oa->hpi_con);
@@ -1124,7 +1137,7 @@ void create_oa_connection(struct oa_soap_handler *oa_handler,
                         soap_close(oa->event_con);
                         oa->event_con = NULL;
                 }
-                g_mutex_unlock(oa->mutex);
+                wrap_g_mutex_unlock(oa->mutex);
 
                 rv = initialize_oa_con(oa, user_name, password);
                 if ((rv != SA_OK) && (oa->oa_status != OA_ABSENT)) {
@@ -1171,13 +1184,18 @@ SaErrorT initialize_oa_con(struct oa_info *oa,
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
 
-        g_mutex_lock(oa->mutex);
+	if (!strcmp(oa->server,"0.0.0.0")) {
+                err("Invalid OA IP  0.0.0.0");
+                return SA_ERR_HPI_INVALID_PARAMS;
+        }
+
+        wrap_g_mutex_lock(oa->mutex);
         rv = asprintf(&url, "%s" PORT, oa->server);			
         if(rv == -1){
                 free(url);
                 err("Failed to allocate memory for buffer to        \
                                              hold OA credentials");
-                g_mutex_unlock(oa->mutex);
+                wrap_g_mutex_unlock(oa->mutex);
                 return SA_ERR_HPI_OUT_OF_MEMORY;
         }
 
@@ -1187,7 +1205,7 @@ SaErrorT initialize_oa_con(struct oa_info *oa,
         if (oa->hpi_con == NULL) {
                 free(url);
                 /* OA may not be reachable */
-                g_mutex_unlock(oa->mutex);
+                wrap_g_mutex_unlock(oa->mutex);
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
 
@@ -1199,12 +1217,12 @@ SaErrorT initialize_oa_con(struct oa_info *oa,
         if (oa->event_con == NULL) {
                 free(url);
                 /* OA may not be reachable */
-                g_mutex_unlock(oa->mutex);
+                wrap_g_mutex_unlock(oa->mutex);
                 soap_close(oa->hpi_con);
                 oa->hpi_con = NULL;
                 return SA_ERR_HPI_INTERNAL_ERROR;
         }
-        g_mutex_unlock(oa->mutex);
+        wrap_g_mutex_unlock(oa->mutex);
 	free(url);
         return SA_OK;
 
@@ -1315,92 +1333,62 @@ void release_oa_soap_resources(struct oa_soap_handler *oa_handler)
         /* Release memory of blade presence, resource id and blade
          * serial number arrays
          */
-        if (oa_handler->oa_soap_resources.server.presence != NULL) {
-                g_free(oa_handler->oa_soap_resources.server.presence);
-        }
-        if (oa_handler->oa_soap_resources.server.resource_id != NULL) {
-                g_free(oa_handler->oa_soap_resources.server.resource_id);
-        }
+        wrap_g_free(oa_handler->oa_soap_resources.server.presence);
+        wrap_g_free(oa_handler->oa_soap_resources.server.resource_id);
+
 	if(oa_handler->oa_soap_resources.server.serial_number != NULL) {
 	    for (i = 0; i < oa_handler->oa_soap_resources.server.max_bays; i++)
 	    {
-		if (oa_handler->oa_soap_resources.server.serial_number[i] !=
-                    NULL) {
-                        g_free(oa_handler->oa_soap_resources.server.
-                               serial_number[i]);
-		}
+                wrap_g_free(oa_handler->oa_soap_resources.server.serial_number[i]);
             }
-            g_free(oa_handler->oa_soap_resources.server.serial_number);
+            wrap_g_free(oa_handler->oa_soap_resources.server.serial_number);
 	}
 
         /* Release memory of interconnect presence and serial number array */
-        if (oa_handler->oa_soap_resources.interconnect.presence != NULL) {
-                g_free(oa_handler->oa_soap_resources.interconnect.presence);
-        }
-        if (oa_handler->oa_soap_resources.interconnect.resource_id != NULL) {
-                g_free(oa_handler->oa_soap_resources.interconnect.resource_id);
-        }
+        wrap_g_free(oa_handler->oa_soap_resources.interconnect.presence);
+        wrap_g_free(oa_handler->oa_soap_resources.interconnect.resource_id);
+
 	if(oa_handler->oa_soap_resources.interconnect.serial_number != NULL) {
             for (i = 0; i < oa_handler->oa_soap_resources.interconnect.max_bays;
              i++) {
-                if (oa_handler->oa_soap_resources.interconnect.
-                    serial_number[i] != NULL) {
-                        g_free(oa_handler->oa_soap_resources.interconnect.
-                               serial_number[i]);
-		}
+                      wrap_g_free(oa_handler->oa_soap_resources.interconnect.
+                          serial_number[i]);
             }
-            g_free(oa_handler->oa_soap_resources.interconnect.serial_number);
+            wrap_g_free(oa_handler->oa_soap_resources.interconnect.serial_number);
 	}
 
         /* Release memory of OA presence and serial number array */
-        if (oa_handler->oa_soap_resources.oa.presence != NULL) {
-                g_free(oa_handler->oa_soap_resources.oa.presence);
-        }
-        if (oa_handler->oa_soap_resources.oa.resource_id != NULL) {
-                g_free(oa_handler->oa_soap_resources.oa.resource_id);
-        }
+        wrap_g_free(oa_handler->oa_soap_resources.oa.presence);
+        wrap_g_free(oa_handler->oa_soap_resources.oa.resource_id);
+
 	if(oa_handler->oa_soap_resources.oa.serial_number != NULL) {
             for (i = 0; i < oa_handler->oa_soap_resources.oa.max_bays; i++) {
-                if (oa_handler->oa_soap_resources.oa.serial_number[i] != NULL) {
-                        g_free(oa_handler->oa_soap_resources.oa.
-                               serial_number[i]);
-		}
+                wrap_g_free(oa_handler->oa_soap_resources.oa.
+                    serial_number[i]);
             }
-            g_free(oa_handler->oa_soap_resources.oa.serial_number);
+            wrap_g_free(oa_handler->oa_soap_resources.oa.serial_number);
 	}
 
         /* Release memory of fan presence.  Since fans do not have serial
          * numbers, a serial numbers array does not need to be released.
          */
-        if (oa_handler->oa_soap_resources.fan.presence != NULL) {
-                g_free(oa_handler->oa_soap_resources.fan.presence);
-        }
-        if (oa_handler->oa_soap_resources.fan.resource_id != NULL) {
-                g_free(oa_handler->oa_soap_resources.fan.resource_id);
-        }
+        wrap_g_free(oa_handler->oa_soap_resources.fan.presence);
+        wrap_g_free(oa_handler->oa_soap_resources.fan.resource_id);
 
         /* Release memory of fan zone resource id */
-        if (oa_handler->oa_soap_resources.fan_zone.resource_id != NULL) {
-                g_free(oa_handler->oa_soap_resources.fan_zone.resource_id);
-        }
+        wrap_g_free(oa_handler->oa_soap_resources.fan_zone.resource_id);
 
         /* Release memory of power supply presence and serial number array */
-        if (oa_handler->oa_soap_resources.ps_unit.presence !=NULL) {
-                g_free(oa_handler->oa_soap_resources.ps_unit.presence);
-        }
-        if (oa_handler->oa_soap_resources.ps_unit.resource_id !=NULL) {
-                g_free(oa_handler->oa_soap_resources.ps_unit.resource_id);
-        }
+        wrap_g_free(oa_handler->oa_soap_resources.ps_unit.presence);
+        wrap_g_free(oa_handler->oa_soap_resources.ps_unit.resource_id);
+
 	if(oa_handler->oa_soap_resources.ps_unit.serial_number != NULL) {
             for (i = 0; i < oa_handler->oa_soap_resources.ps_unit.max_bays; i++)
 	    {
-                if (oa_handler->oa_soap_resources.ps_unit.serial_number[i]
-                    != NULL) {
-                        g_free(oa_handler->oa_soap_resources.
-                                ps_unit.serial_number[i]);
-		}
+                wrap_g_free(oa_handler->oa_soap_resources.
+                            ps_unit.serial_number[i]);
             }
-            g_free(oa_handler->oa_soap_resources.ps_unit.serial_number);
+            wrap_g_free(oa_handler->oa_soap_resources.ps_unit.serial_number);
 	}
 }
 
@@ -1613,7 +1601,7 @@ SaErrorT update_oa_fw_version(struct oh_handler_state *oh_handler,
         SaHpiInt32T minor;
 
         if (oh_handler == NULL || response == NULL) {
-                printf("Invalid parameter");
+                err("Invalid parameter");
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
 
@@ -1722,7 +1710,7 @@ SaErrorT oa_soap_get_oa_ip(char *server,
         struct extraDataInfo extra_data_info;
         xmlNode *extra_data = NULL;
 
-        if (&network_info_response == NULL || server == NULL) {
+        if (server == NULL) {
                 err("Invalid parameters");
                 return SA_ERR_HPI_INVALID_PARAMS;
         }
@@ -1826,6 +1814,101 @@ SaErrorT oa_soap_get_oa_ip(char *server,
                 }
                 interface_name = strchr(server, '%');
                 strcat(oa_ip, interface_name);
+        }
+        return SA_OK;
+}
+
+/**
+ * oa_soap_check_serial_number()
+ *      @slot:              slot number of the blade
+ *      @serial_number:     Pointer to serial_number string
+ *
+ * Purpose:
+ *      Just prints out a message. OA sends out information from iLO as it
+ *      becomes available. So empty, "[Unknown]" serial numbers are common
+ *      During a re-discovery after a switchover a blade with a good serial
+ *      number could be replaced with a blade with a bad serial number. So 
+ *      only thing we could do is give a warning message. Nothing more. It 
+ *      is users responsility to correct it using RBSU/boot utility
+ *
+ * Detailed Description: NA
+ *
+ * Return values:
+ *                Void
+ **/
+void oa_soap_check_serial_number(int slot, char *serial_number)
+{
+        int j=0, len=0;
+
+        if (serial_number == 0 ) { 
+               WARN("Blade(%d) serialNumber is NULL",slot);
+        } else if ((len = strlen(serial_number)) == 0) { 
+               WARN("Blade(%d) serialNumber is empty",slot);
+        } else if (strcmp(serial_number,"[Unknown]")) {
+               if (len >= 9) 
+                    len = 9;
+               for (j =0; j < len; j++){
+                     if (isalnum(serial_number[j]))
+                         continue;
+                     else {
+                         CRIT("Blade(%d) serialNumber %s is "
+                              "invalid",slot,serial_number);
+                         break;
+                     }
+               }
+        } else {
+               dbg("Blade(%d) serialNumber is [Unknown]",slot);
+        }
+}
+
+/**
+ * oa_soap_sleep_in_loop()
+ *      @oa_handler: 	Pointer to OA SOAP handler structure
+ *      @secs:		Total time to sleep in seconds
+ * 
+ * Purpose:
+ *	OA takes a long time to switchover and there are many situations
+ *	where we need to wait for more than 3 seconds. In all thse situations
+ * 	if a signal arrives, it is better to get out asap. So we check for the
+ *	shutdown_event_thread after every 3 seconds and get out if it is true
+ *	This will enable full, proper shutdown of the plugin in case of kill
+ *
+ * Detailed Description: NA
+ *
+ * Return values:
+ *                Exit or OK
+ **/
+SaErrorT oa_soap_sleep_in_loop(struct oa_soap_handler *oa_handler, int secs)
+{
+        int i=3, j=0; 
+        GThread *my_id;
+        if (oa_handler == NULL || oa_handler->oa_1 == NULL || 
+                 oa_handler->oa_2 == NULL || secs <= 0 ) {
+                err("Wrong parameters\n");
+                return SA_ERR_HPI_INTERNAL_ERROR;
+        }
+        if (secs < 4) {
+                sleep(secs);
+                return SA_OK;
+        } 
+        my_id = g_thread_self();
+        while (j < secs) {
+
+               /* Exit only from event threads, owned by plugin */
+               if (my_id == oa_handler->oa_1->thread_handler ||
+                   my_id == oa_handler->oa_2->thread_handler ) {
+                        OA_SOAP_CHEK_SHUTDOWN_REQ(oa_handler, NULL, NULL, NULL);
+               } else {
+                        /* In case of infrastructure threads just return */
+                        if( oa_handler->shutdown_event_thread )
+                                return SA_OK;
+               } 
+               if (j+i > secs)
+                       i=secs-j;         
+               if ( i > 0 )
+                       sleep(i);
+               j = j+i;
+                
         }
         return SA_OK;
 }

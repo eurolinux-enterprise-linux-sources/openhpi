@@ -77,9 +77,9 @@ ALLSOURCES = \
         $(shell find $(top_srcdir)/utils -name .svn -o -name CVS -prune -o \
         -name '*.[chS]' -print | grep -v '/t/') \
         $(shell find $(top_srcdir)/openhpid -name .svn -o -name CVS -prune -o \
-        -name '*.[chS]' -print -o '*.cpp' -print | grep -v '/t/') \
+        -name '*.[chS]' -print -o -name '*.cpp' -print | grep -v '/t/') \
         $(shell find $(top_srcdir)/plugins -name .svn -o -name CVS -prune -o \
-        -name '*.[chS]' -print -o '*.cpp' -print | grep -v '/t/') \
+        -name '*.[chS]' -print -o -name '*.cpp' -print | grep -v '/t/') \
         $(shell find $(top_srcdir)/snmp -name .svn -o -name CVS -prune -o \
         -name '*.[chS]' -print | grep -v '/t/') \
         $(shell find $(top_srcdir)/ssl -name .svn -o -name CVS -prune -o \
@@ -98,14 +98,15 @@ includedir=$(base_includedir)/openhpi
 include_HEADERS = $(top_srcdir)/include/SaHpi.h \
                   $(top_srcdir)/include/SaHpiXtca.h \
                   $(top_srcdir)/include/SaHpiAtca.h \
-		  $(top_srcdir)/include/SaHpiBladeCenter.h \
+                  $(top_srcdir)/include/SaHpiBladeCenter.h \
                   $(top_srcdir)/include/oHpi.h \
                   $(top_srcdir)/utils/oh_utils.h \
                   $(top_srcdir)/utils/announcement_utils.h \
                   $(top_srcdir)/utils/rpt_utils.h \
                   $(top_srcdir)/utils/sahpi_enum_utils.h \
-		  $(top_srcdir)/utils/sahpixtca_enum_utils.h \
-		  $(top_srcdir)/utils/sahpiatca_enum_utils.h \
+                  $(top_srcdir)/utils/sahpi_gcrypt_utils.h \
+                  $(top_srcdir)/utils/sahpixtca_enum_utils.h \
+                  $(top_srcdir)/utils/sahpiatca_enum_utils.h \
                   $(top_srcdir)/utils/sahpi_event_encode.h \
                   $(top_srcdir)/utils/sahpi_event_utils.h \
                   $(top_srcdir)/utils/sahpi_struct_utils.h \
@@ -116,8 +117,7 @@ include_HEADERS = $(top_srcdir)/include/SaHpi.h \
                   $(top_srcdir)/utils/event_utils.h \
                   $(top_srcdir)/clients/oh_clients.h
 
-docsdir=$(datadir)/doc/$(PACKAGE_NAME)-$(VERSION)
-docs_DATA = README README.daemon COPYING
+doc_DATA = README README.daemon COPYING ChangeLog
 
 $(top_srcdir)/utils/sahpi_enum_utils.h:
 	make -C $(top_builddir)/utils sahpi_enum_utils.h
@@ -132,7 +132,7 @@ install-data-local: openhpi.pc openhpi.conf.example simulation.data.example open
 	$(mkinstalldirs) $(DESTDIR)$(libdir)/pkgconfig
 	$(INSTALL_DATA) openhpi.pc $(DESTDIR)$(libdir)/pkgconfig
 	$(mkinstalldirs) $(DESTDIR)$(VARPATH)
-	chmod 777 $(DESTDIR)$(VARPATH)
+	chmod 755 $(DESTDIR)$(VARPATH)
 	$(mkinstalldirs) $(DESTDIR)$(sysconfdir)/openhpi
 	if test ! -e  $(DESTDIR)$(sysconfdir)/openhpi/openhpi.conf; then \
 		$(INSTALL) -m 600 $(top_srcdir)/openhpi.conf.example $(DESTDIR)$(sysconfdir)/openhpi/openhpi.conf; \

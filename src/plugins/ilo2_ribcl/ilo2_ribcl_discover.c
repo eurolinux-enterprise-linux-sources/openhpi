@@ -43,6 +43,7 @@
 #include <sys/stat.h>   /* For test routine ilo2_ribcl_getfile() */
 #include <fcntl.h>      /* For test routine ilo2_ribcl_getfile() */
 #endif /* ILO2_RIBCL_SIMULATE_iLO2_RESPONSE */
+#include "sahpi_wrappers.h"
 
 /* Foreward decls: */
 
@@ -81,67 +82,39 @@ static void ilo2_ribcl_discover_chassis_sensors( struct oh_handler_state *,
 	struct oh_event *);
 void ilo2_ribcl_add_resource_capability( struct oh_handler_state *, 
 	struct oh_event *, SaHpiCapabilitiesT);
+static SaErrorT ilo2_ribcl_get_iml( struct oh_handler_state *);
+static SaErrorT ilo2_ribcl_discovery(void *);
+gpointer ilo_thread_func( gpointer);
 
 #ifdef ILO2_RIBCL_SIMULATE_iLO2_RESPONSE
 static int ilo2_ribcl_getfile( char *, char *, int);
 #endif /* ILO2_RIBCL_SIMULATE_iLO2_RESPONSE */
 
-
+extern SaHpiBoolT close_handler;
 
 /**
- * ilo2_ribcl_discover_resources: Discovers resources for this instance 
- * of the iLO2 RIBCL plug-in 
- * @handler:  Handler data pointer.
+ * ilo2_ribcl_discovery() 
+ * @handler Handler data pointer.
  *
- * This function discovers resources for this instance of the iLO2 
- * RIBCL plugin.
- * Detailed description:
+ * This function is called by ilo2_ribcl_discover_resources and it is
+ * used for initail discovery and re-discovery, if  required
  *
- *	- Reset the discovery flags for each resource in DiscoveryData
- *	  via a call to ilo2_ribcl_clear_discoveryflags(). This allows us
- *	  to detect removed resources.
- *	- Call ilo2_ribcl_do_discovery(), which will open an SSL connection
- *	  to iLO2 using the hostname and port saved in the ilo2_ribcl_handler
- * 	  send the ILO2_RIBCL_GET_SERVER_DATA xml commands, and parse the
- *	  results into information stored in the DiscoveryData structure
- *	  within our private handler.
- *	- Finally, call a series of discovery routines that examine
- *	  DiscoveryData and generate rpt entries and events for
- *	  resources that have been added, removed, or failed.
- *
- * Return values:
- * Builds/updates internal RPT cache - normal operation.
- * Returns SA_OK for success
- * SA_ERR_HPI_OUT_OF_MEMORY - Cannot allocate space for internal memory
- * SA_ERR_HPI_INTERNAL_ERROR - SSL and XML errors
- * SA_ERR_HPI_INVALID_PARAMS - if plungin handler or private handler is null
+ * Return Values
+ *	SA_OK - On Success
+ *	SA_ERR_HPI_INTERNAL_ERROR if no entity_root
+ *	return values of other functions, if they fail
  *
  **/
-SaErrorT ilo2_ribcl_discover_resources(void *handler)
+static SaErrorT ilo2_ribcl_discovery(void *handler)
 {
 	struct oh_handler_state *oh_handler =
 		(struct oh_handler_state *) handler;
-        ilo2_ribcl_handler_t *ilo2_ribcl_handler;
+	ilo2_ribcl_handler_t *ilo2_ribcl_handler =
+		(ilo2_ribcl_handler_t *) oh_handler->data;
 	SaErrorT  ret;
 	SaHpiEntityPathT ep_root;
-	
-	if (!handler) {
-		err("ilo2_ribcl_discover_resources(): Invalid handler parameter.");
-		return(SA_ERR_HPI_INVALID_PARAMS);
-	}
 
-        ilo2_ribcl_handler = (ilo2_ribcl_handler_t *) oh_handler->data;
-	if(! ilo2_ribcl_handler) {
-		err("ilo2_ribcl_discover_resources(): Invalid private handler parameter.");
-		return(SA_ERR_HPI_INVALID_PARAMS);
-	}
-
-	if( ilo2_ribcl_handler->entity_root == NULL){
-		err("ilo2_ribcl_discover_resources(): entity_root is NULL.");
-		return(SA_ERR_HPI_INTERNAL_ERROR);
-	}
-
-	/* If our plugin becomes multhithreaded, lock here? */
+	dbg("Begin discovery/re-discovery");
 
 	ret = oh_encode_entitypath(ilo2_ribcl_handler->entity_root, &ep_root);
 	if( ret != SA_OK){
@@ -217,11 +190,158 @@ SaErrorT ilo2_ribcl_discover_resources(void *handler)
 		return( ret);
 	}
 
-	/* Since we do not have a polling thread for sensors (yet), we process
-	 * any changed sensor values as part of a discovery operation, since
-	 * the openhpid should be regularly calling us.
-	 */
-	ilo2_ribcl_process_sensors( oh_handler);
+	dbg("End discovery/re-discovery");
+
+	return (ret);
+}
+
+/**
+ * ilo_thread_func()
+ * @ilo_info: With mutex, cond and handler 
+ * Thread responsible for re-discover, if required
+ * Process sensors regularly
+ * In a continuous loop till close_handler is set
+ * Mutex and condition timer are used to exit immediately on signal
+ *
+ **/
+
+gpointer ilo_thread_func( gpointer ilo_info)
+{
+
+        SaErrorT ret;
+        iLO_info_t *pilo_info = (iLO_info_t*)ilo_info;
+        struct oh_handler_state *oh_handler = pilo_info->oh_handler;
+        ilo2_ribcl_handler_t *ilo2_ribcl_handler = oh_handler->data;
+
+	dbg("iLO thread started: process sensor, iml log");
+
+        wrap_g_mutex_lock(pilo_info->iLO_mutex);
+
+        while (close_handler == SAHPI_FALSE) {
+
+		ilo2_ribcl_process_sensors( oh_handler);
+		ret = ilo2_ribcl_get_iml(oh_handler);
+		if( ret != SA_OK){
+			err("ilo2_ribcl_get_iml():failed, check network");
+			err("May have to restart daemon if it continuous");
+			// TODO : on error ?
+		}
+
+		/* A sort of re-discovery */
+		if (ilo2_ribcl_handler->need_rediscovery == SAHPI_TRUE) {
+			dbg("Do a discovery due to a PS/FAN event");
+			ilo2_ribcl_discovery(oh_handler);
+			ilo2_ribcl_handler->need_rediscovery = SAHPI_FALSE;
+		}
+
+	#if GLIB_CHECK_VERSION (2, 32, 0)
+		gint64 time;
+		time = g_get_monotonic_time();
+		time = time + (180 * G_USEC_PER_SEC);
+		wrap_g_cond_timed_wait( pilo_info->iLO_cond,
+					pilo_info->iLO_mutex, time);
+	#else
+		GTimeVal time;
+		g_get_current_time(&time);
+		g_time_val_add(&time, (180 * G_USEC_PER_SEC));
+		wrap_g_cond_timed_wait( pilo_info->iLO_cond,
+					pilo_info->iLO_mutex, &time);
+	#endif
+
+	}
+
+	wrap_g_mutex_unlock(pilo_info->iLO_mutex);
+
+	dbg("iLO thread exited: process sensor, iml log");
+	return (gpointer *) SA_OK;
+}
+
+/**
+ * ilo2_ribcl_discover_resources: Discovers resources for this instance 
+ * of the iLO2 RIBCL plug-in 
+ * @handler:  Handler data pointer.
+ *
+ * This function discovers resources for this instance of the iLO2 
+ * RIBCL plugin.
+ * Detailed description:
+ *
+ *	- Reset the discovery flags for each resource in DiscoveryData
+ *	  via a call to ilo2_ribcl_clear_discoveryflags(). This allows us
+ *	  to detect removed resources.
+ *	- Call ilo2_ribcl_do_discovery(), which will open an SSL connection
+ *	  to iLO2 using the hostname and port saved in the ilo2_ribcl_handler
+ * 	  send the ILO2_RIBCL_GET_SERVER_DATA xml commands, and parse the
+ *	  results into information stored in the DiscoveryData structure
+ *	  within our private handler.
+ *	- Finally, call a series of discovery routines that examine
+ *	  DiscoveryData and generate rpt entries and events for
+ *	  resources that have been added, removed, or failed.
+ *
+ * Return values:
+ * Builds/updates internal RPT cache - normal operation.
+ * Returns SA_OK for success
+ * SA_ERR_HPI_OUT_OF_MEMORY - Cannot allocate space for internal memory
+ * SA_ERR_HPI_INTERNAL_ERROR - SSL and XML errors
+ * SA_ERR_HPI_INVALID_PARAMS - if plungin handler or private handler is null
+ *
+ **/
+SaErrorT ilo2_ribcl_discover_resources(void *handler)
+{
+	struct oh_handler_state *oh_handler =
+		(struct oh_handler_state *) handler;
+        ilo2_ribcl_handler_t *ilo2_ribcl_handler;
+	SaErrorT  ret;
+        
+        if( close_handler == SAHPI_TRUE ) {
+            INFO("ilo2_ribcl_handler is closed. Thread %p returning",
+                     g_thread_self());
+            return(SA_OK);
+        }
+
+	if (!handler) {
+		err("ilo2_ribcl_discover_resources(): NULL handler parameter.");
+		return(SA_ERR_HPI_INVALID_PARAMS);
+	}
+
+        ilo2_ribcl_handler = (ilo2_ribcl_handler_t *) oh_handler->data;
+	if(! ilo2_ribcl_handler) {
+		err("ilo2_ribcl_discover_resources(): NULL private handler");
+		return(SA_ERR_HPI_INVALID_PARAMS);
+	}
+
+	if( ilo2_ribcl_handler->entity_root == NULL){
+		err("ilo2_ribcl_discover_resources(): entity_root is NULL.");
+		return(SA_ERR_HPI_INTERNAL_ERROR);
+	}
+
+	/* If our plugin becomes multhithreaded, lock here? */
+
+	if (ilo2_ribcl_handler->discovery_complete == SAHPI_TRUE)
+		return SA_OK;
+
+	ret = ilo2_ribcl_discovery(oh_handler);
+	if ( ret != SA_OK){
+		err("ilo2_ribcl_discovery():failed");
+		return (ret);
+	}
+
+	ilo2_ribcl_handler->discovery_complete = SAHPI_TRUE;
+
+	if (ilo2_ribcl_handler->ilo_thread_data->hthread == NULL) {
+                ilo2_ribcl_handler->ilo_thread_data->hthread =
+			wrap_g_thread_create_new(
+					"ilo_sensor_thread",
+					ilo_thread_func,
+					ilo2_ribcl_handler->ilo_thread_data,
+					TRUE, 0);
+
+                if (ilo2_ribcl_handler->ilo_thread_data->hthread == NULL) {
+                        err("wrap_g_thread_create_new failed");
+                        return SA_ERR_HPI_INTERNAL_ERROR;
+                }
+        }
+
+	dbg("ilo_sensor_thread: Thread created successfully");
 
 	return(SA_OK);
 }
@@ -305,6 +425,7 @@ static SaErrorT ilo2_ribcl_do_discovery( ilo2_ribcl_handler_t *ir_handler)
 			if( ret <0){
 				err("ilo2_ribcl_do_discovery():"
 					"could not detect iLO type.");
+				free( d_response);
 				return( SA_ERR_HPI_INTERNAL_ERROR);
 			}
 			/*
@@ -317,7 +438,7 @@ static SaErrorT ilo2_ribcl_do_discovery( ilo2_ribcl_handler_t *ir_handler)
 		ret = ilo2_ribcl_ssl_send_command( ir_handler, discover_cmd,
 				d_response, ILO2_RIBCL_DISCOVER_RESP_MAX);
 		if(ir_handler->ilo_type == ILO3) {
-			if(strstr(d_response,"Gen8")) {
+			if(strstr(d_response,"Gen8") || strstr(d_response,"Gen9")) {
 				dbg("Found iLO4 MP");
 				ir_handler->ilo_type = ILO4;
 			} else
@@ -333,6 +454,7 @@ static SaErrorT ilo2_ribcl_do_discovery( ilo2_ribcl_handler_t *ir_handler)
 		if( ret <0){
 			err("ilo2_ribcl_do_discovery():"
 				"could not detect iLO type.");
+			free( d_response);
 			return( SA_ERR_HPI_INTERNAL_ERROR);
 		}
 		/*
@@ -346,7 +468,7 @@ static SaErrorT ilo2_ribcl_do_discovery( ilo2_ribcl_handler_t *ir_handler)
 	ret = ilo2_ribcl_ssl_send_command( ir_handler, discover_cmd,
 				d_response, ILO2_RIBCL_DISCOVER_RESP_MAX);
 	if(ir_handler->ilo_type == ILO3) {
-		if(strstr(d_response,"Gen8")) {
+		if(strstr(d_response,"Gen8") || strstr(d_response,"Gen9")) {
 			dbg("Found iLO4 MP");
 			ir_handler->ilo_type = ILO4;
 		}else
@@ -385,7 +507,8 @@ static SaErrorT ilo2_ribcl_do_discovery( ilo2_ribcl_handler_t *ir_handler)
 			break;
 		default:
 			err("ilo2_ribcl_do_discovery():"
-				"failed to detect ilo type.");
+				"failed to detect ilo type %d.",
+						ir_handler->ilo_type);
 	}
 	if( ret != RIBCL_SUCCESS){
 		err("ilo2_ribcl_do_discovery(): response parse failed.");
@@ -556,7 +679,7 @@ static SaErrorT ilo2_ribcl_discover_chassis(
 		(SAHPI_CAPABILITY_RESOURCE | SAHPI_CAPABILITY_RESET 
 			| SAHPI_CAPABILITY_POWER | SAHPI_CAPABILITY_RDR); 
 	ev->resource.HotSwapCapabilities = ILO2_RIBCL_MANAGED_HOTSWAP_CAP_FALSE;
-	ev->resource.ResourceSeverity = SAHPI_CRITICAL;
+	ev->resource.ResourceSeverity = SAHPI_OK;
 	ev->resource.ResourceFailed = SAHPI_FALSE;
 
 	oh_init_textbuffer(&(ev->resource.ResourceTag));
@@ -643,6 +766,7 @@ static SaErrorT ilo2_ribcl_discover_chassis(
 		default:
 			err("ilo2_ribcl_discover_chassis():"
 					"failed to detect ilo type.");
+			free( tmptag);
 			return SA_OK;
 	}
 
@@ -945,6 +1069,20 @@ static SaErrorT ilo2_ribcl_discover_fans( struct oh_handler_state *oh_handler,
 		if( (fanstatus != NULL) && !strcmp( fanstatus, "Failed")){
 			failed = SAHPI_TRUE;
 		}
+		
+		/**	If the FAN is not installed then FAN Status comes as
+		 *	"Not installed" or "Unknown", so do not discover this
+		 *	resource and skip to next FAN resource.
+		 * 	<FAN>
+		 *		<ZONE VALUE = "System"/>
+		 *  		<LABEL VALUE = "Fan 1"/>
+		 *		<STATUS VALUE = "Not Installed"/>
+		 *		<SPEED VALUE = "0" UNIT="Percentage"/>
+		 *        </FAN>	
+ 		 **/
+		if(!strcmp(fanstatus, "Not Installed")|| !strcmp(fanstatus, "Unknown")){
+			fandata->fanflags = ~IR_DISCOVERED;
+		}
 
 		/* include the fan location in the text tag */
 		tagsize =  strlen( fandata->label) +
@@ -1043,8 +1181,16 @@ static SaErrorT ilo2_ribcl_discover_powersupplies( struct oh_handler_state *oh_h
 		/* Check if the discovery reported a failed power supply */
 		failed = SAHPI_FALSE;
 		psustatus = psudata->status;
-		if( (psustatus != NULL) && !strcmp( psustatus, "Failed")){
-			failed = SAHPI_TRUE;
+		if(psustatus != NULL) {
+			if(strstr( psustatus, "Fail") ||
+			                strstr( psustatus, "Lost")) {
+		                  failed = SAHPI_TRUE;
+		        }
+		}
+
+		if(!strcmp(psustatus, "Not Installed") || 
+			   !strcmp(psustatus, "Unknown")){
+			psudata->psuflags = ~IR_DISCOVERED;
 		}
 
 		if( psudata->psuflags & IR_DISCOVERED ){
@@ -1242,6 +1388,8 @@ static SaErrorT ilo2_ribcl_discovered_fru( struct oh_handler_state *oh_handler,
 	SaErrorT ret;
 	SaHpiBoolT resource_wasfailed;
 	ilo2_ribcl_resource_info_t *res_info = NULL;
+	ilo2_ribcl_handler_t *ilo2_ribcl_handler = 
+		(ilo2_ribcl_handler_t *) oh_handler->data;
 
 	switch( *d_state){
 
@@ -1266,7 +1414,12 @@ static SaErrorT ilo2_ribcl_discovered_fru( struct oh_handler_state *oh_handler,
 			(SAHPI_CAPABILITY_RESOURCE | SAHPI_CAPABILITY_FRU); 
 
 		ev->resource.HotSwapCapabilities = 0;
-		ev->resource.ResourceSeverity = SAHPI_CRITICAL;
+		if(ilo2_ribcl_handler->discovery_complete == SAHPI_FALSE){
+			ev->resource.ResourceSeverity = SAHPI_OK;
+		}else {
+			ev->resource.ResourceSeverity = SAHPI_CRITICAL;
+		}
+
 		ev->resource.ResourceFailed = isfailed;
 		oh_init_textbuffer(&(ev->resource.ResourceTag));
 		oh_append_textbuffer( &(ev->resource.ResourceTag), tag);
@@ -1523,6 +1676,7 @@ static void ilo2_ribcl_discover_temp_sensors(
         char *label = NULL, *location = NULL, *description = NULL;
 
         ir_handler = ( ilo2_ribcl_handler_t *) oh_handler->data;
+        memset( &si_initial, 0, sizeof( struct ilo2_ribcl_sensinfo));
 
         /* Look for the all temperature isensors from the RIBCL */
 	for( idex = 4; idex <= ILO2_RIBCL_DISCOVER_TS_MAX; idex++){
@@ -1661,7 +1815,6 @@ static SaErrorT ilo2_ribcl_resource_set_failstatus(
 		return( SA_ERR_HPI_NOT_PRESENT);
 	}
 
-	rpt->ResourceFailed = resource_failed;
 
 	/* Generate a RESOURCE_FAILURE event */
 
@@ -1674,19 +1827,26 @@ static SaErrorT ilo2_ribcl_resource_set_failstatus(
 	ev->resource = *rpt;
 	ev->hid = oh_handler->hid;
 	ev->event.EventType = SAHPI_ET_RESOURCE;
-	ev->event.Severity = ev->resource.ResourceSeverity;
+	ev->event.Severity = SAHPI_CRITICAL;
 	ev->event.Source = ev->resource.ResourceId;
 	if ( oh_gettimeofday(&(ev->event.Timestamp)) != SA_OK){
 		ev->event.Timestamp = SAHPI_TIME_UNSPECIFIED;
 	}
-	if( resource_failed == SAHPI_FALSE){
+	if(( resource_failed == SAHPI_FALSE) && 
+                                  (rpt->ResourceFailed == SAHPI_TRUE)) {
 		ev->event.EventDataUnion.ResourceEvent.ResourceEventType
 					= SAHPI_RESE_RESOURCE_RESTORED;
-	} else {
+	} else if((resource_failed == SAHPI_TRUE) && 
+                                  (rpt->ResourceFailed != SAHPI_TRUE)) {
 		ev->event.EventDataUnion.ResourceEvent.ResourceEventType
 					= SAHPI_RESE_RESOURCE_FAILURE;
+	} else {
+		/* Return as the state has not changed */
+		oh_event_free(ev, 0);
+		return( SA_OK);
 	}
 				
+	rpt->ResourceFailed = resource_failed;
 	oh_evt_queue_push(oh_handler->eventq, ev);
 
 	return( SA_OK);
@@ -2059,7 +2219,7 @@ static SaErrorT ilo2_ribcl_controls(struct oh_handler_state *oh_handler,
 		default:
 		{
 			err("ilo2_ribcl_controls(): Invalid iLO2 RIBCL control type");
-			g_free(rdrptr);
+			wrap_g_free(rdrptr);
 			return(SA_ERR_HPI_INTERNAL_ERROR);
 		}
 	}
@@ -2074,7 +2234,7 @@ static SaErrorT ilo2_ribcl_controls(struct oh_handler_state *oh_handler,
 	cinfo_ptr = g_memdup(&cinfo, sizeof(cinfo));
 	if(cinfo_ptr == NULL) {
 		err("ilo2_ribcl_controls(): Out of memory.");
-		g_free(rdrptr);
+		wrap_g_free(rdrptr);
 		return(SA_ERR_HPI_OUT_OF_MEMORY);
 	}
 	
@@ -2082,8 +2242,8 @@ static SaErrorT ilo2_ribcl_controls(struct oh_handler_state *oh_handler,
 		rdrptr, cinfo_ptr, 0);
 	if (err) {
 		err("Could not add RDR. Error=%s.", oh_lookup_error(err));
-		g_free(rdrptr);
-		g_free(cinfo_ptr);
+		wrap_g_free(rdrptr);
+		wrap_g_free(cinfo_ptr);
 		return(SA_ERR_HPI_INTERNAL_ERROR);
 	} else {
 		event->rdrs = g_slist_append(event->rdrs, rdrptr);
@@ -2175,7 +2335,7 @@ static SaErrorT ilo2_ribcl_add_severity_sensor(
  	 * to be associated with this RDR. */
 	si = g_memdup(sens_info, sizeof(struct ilo2_ribcl_sensinfo));
 	if( si == NULL){
-		g_free( rdr);
+		wrap_g_free( rdr);
 		err("ilo2_ribcl_add_severity_sensor: Memory allocation failed.");
 		return(SA_ERR_HPI_OUT_OF_MEMORY);
 	}
@@ -2185,8 +2345,8 @@ static SaErrorT ilo2_ribcl_add_severity_sensor(
 	if( ret != SA_OK){
 		err("ilo2_ribcl_add_severity_sensor: could not add RDR. Error = %s.",
 			oh_lookup_error(ret));
-		g_free( si);
-		g_free( rdr);
+		wrap_g_free( si);
+		wrap_g_free( rdr);
 		return( SA_ERR_HPI_INTERNAL_ERROR);
 	} else {
 		event->rdrs = g_slist_append(event->rdrs, rdr);
@@ -2297,7 +2457,7 @@ static SaErrorT ilo2_ribcl_add_threshold_sensor(
 	 * to be associated with this RDR. */
 	si = g_memdup(sens_info, sizeof(struct ilo2_ribcl_sensinfo));
 	if( si == NULL){
-		g_free( rdr);
+		wrap_g_free( rdr);
 		err("ilo2_ribcl_add_threshold_sensor: Memory allocation "
 				"failed.");
 		return(SA_ERR_HPI_OUT_OF_MEMORY);
@@ -2309,8 +2469,8 @@ static SaErrorT ilo2_ribcl_add_threshold_sensor(
 	if( ret != SA_OK){
 		err("ilo2_ribcl_add_threshold_sensor: could not add RDR. "
 				"Error = %s.", oh_lookup_error(ret));
-		g_free( si);
-		g_free( rdr);
+		wrap_g_free( si);
+		wrap_g_free( rdr);
 		return( SA_ERR_HPI_INTERNAL_ERROR);
 	} else {
 		event->rdrs = g_slist_append(event->rdrs, rdr);
@@ -2510,6 +2670,98 @@ void ilo2_ribcl_add_resource_capability( struct oh_handler_state *oh_handler,
 } /* end ilo2_ribcl_add_resource_capability() */
 
 
+
+/**
+ * ilo2_ribcl_get_iml
+ * @oh_handler: The private handler for this plugin instance.
+ *
+ *	This routine sends the ILO2_RIBCL_GET_EVENT_LOG xml commands 
+ *	to an iLO2 via a SSL connection, receive the resulting output
+ *	from iLO2, parses that output, and writes the IML into log file.
+ *
+ *
+ * Return values:
+ *	SA_OK for success.
+ *	SA_ERR_HPI_OUT_OF_MEMORY if allocation fails
+ *	SA_ERR_HPI_INTERNAL_ERROR if our customized command is null or
+ *		if response parsing fails.
+ *
+ **/
+static SaErrorT ilo2_ribcl_get_iml( struct oh_handler_state *oh_handler)
+{
+	ilo2_ribcl_handler_t *ir_handler = NULL;
+	char *discover_cmd = NULL;
+	char *d_response = NULL;	/* command response buffer */
+	int ret = 0;
+	char *new_buffer = NULL;
+	ir_handler = (ilo2_ribcl_handler_t *) oh_handler->data;
+
+	/* Allocate a temporary response buffer. Since the discover
+	 * command should be infrequently run, we dynamically allocate
+	 * instead of keeping a buffer around all the time.
+	 */
+
+	d_response = malloc(ILO2_RIBCL_DISCOVER_RESP_MAX);
+	if( d_response == NULL){
+		err("ilo2_ribcl_get_iml(): failed to allocate resp buffer.");
+		return( SA_ERR_HPI_OUT_OF_MEMORY);
+	}
+
+	/* Retrieve our customized command buffer */
+	discover_cmd = ir_handler->ribcl_xml_cmd[IR_CMD_GET_EVENT_LOG];
+	if( discover_cmd == NULL){
+		err("ilo2_ribcl_get_iml(): null customized command.");
+		free( d_response);
+		return( SA_ERR_HPI_INTERNAL_ERROR);
+	}
+
+
+        /* Send the command to iLO2 and get the response. */
+        ret = ilo2_ribcl_ssl_send_command( ir_handler, discover_cmd,
+				d_response, ILO2_RIBCL_DISCOVER_RESP_MAX);
+        if( ret !=0 ){
+            err("ilo2_ribcl_get_iml(): command send failed.");
+            free( d_response);
+            return( SA_ERR_HPI_INTERNAL_ERROR);
+        }
+
+	/* Now, parse the response. The information related to DIMM error will 
+	 * be extracted.*/
+	/*switch based on ilo*/
+	switch(ir_handler->ilo_type){
+
+		case ILO:
+		case ILO2:
+			ret = ir_xml_parse_iml( oh_handler, 
+							d_response);
+			break;
+		case ILO3:
+		case ILO4:
+			new_buffer = ir_xml_decode_chunked(d_response);
+			ret = ir_xml_parse_iml( oh_handler, 
+							new_buffer);
+			break;
+		default:
+			err("ilo2_ribcl_get_iml():"
+				"failed to detect ilo type.");
+	}
+	if( ret != RIBCL_SUCCESS){
+		err("ilo2_ribcl_get_iml(): response parse failed in \
+                        ir_xml_parse_iml().");
+		free( d_response);
+		free( new_buffer);
+		return( SA_ERR_HPI_INTERNAL_ERROR);
+	}
+	/* We're finished. Free up the temporary response buffer */
+	free( d_response);
+	/*
+	 * new_buffer will be NULL for ILO2
+	 * it is absolutely fine to free NULL
+	 */
+	free( new_buffer);
+	return( SA_OK);
+	
+}
 
 
 #ifdef ILO2_RIBCL_SIMULATE_iLO2_RESPONSE
